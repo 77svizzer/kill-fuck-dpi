@@ -1,33 +1,30 @@
 @echo off
-setlocal EnableDelayedExpansion
-title KILL F#CK DPI - ÐŸÐ°Ð½ÐµÐ»ÑŒ ÑƒÐ¿Ñ€Ð°Ð²Ð»ÐµÐ½Ð¸Ñ
+setlocal
+chcp 1251 >nul
+title KILL F#CK DPI - Ïàíåëü óïðàâëåíèÿ
 
-:: Ð£ÑÑ‚Ð°Ð½Ð¾Ð²ÐºÐ° ÐºÐ¾Ð´Ð¸Ñ€Ð¾Ð²ÐºÐ¸ UTF-8 Ð´Ð»Ñ ÐºÐ¾Ñ€Ñ€ÐµÐºÑ‚Ð½Ð¾Ð³Ð¾ Ð¾Ñ‚Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ñ Ñ€ÑƒÑÑÐºÐ¾Ð³Ð¾ ÑÐ·Ñ‹ÐºÐ°
-chcp 65001 >nul
-
-:: ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð¿Ñ€Ð°Ð² ÐÐ´Ð¼Ð¸Ð½Ð¸ÑÑ‚Ñ€Ð°Ñ‚Ð¾Ñ€Ð°
+:: Ïðîâåðêà ïðàâ Àäìèíèñòðàòîðà
 net session >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [i] Ð—Ð°Ð¿Ñ€Ð¾Ñ Ð¿Ñ€Ð°Ð² ÐÐ´Ð¼Ð¸Ð½Ð¸ÑÑ‚Ñ€Ð°Ñ‚Ð¾Ñ€Ð°...
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
+    echo [i] Çàïðîñ ïðàâ Àäìèíèñòðàòîðà...
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/k cd /d """%~dp0""" && call """%~f0"""' -Verb RunAs"
     exit /b
 )
 
-:: ÐŸÐµÑ€ÐµÑ…Ð¾Ð´ Ð² Ð´Ð¸Ñ€ÐµÐºÑ‚Ð¾Ñ€Ð¸ÑŽ ÑÐºÑ€Ð¸Ð¿Ñ‚Ð°
 cd /d "%~dp0"
 
 :MENU
 cls
 echo ===================================================================
-echo             KILL F#CK DPI - Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹ Ð¾Ð±Ñ…Ð¾Ð´ Ð±Ð»Ð¾ÐºÐ¸Ñ€Ð¾Ð²Ð¾Ðº             
+echo             KILL F#CK DPI - Ëîêàëüíûé îáõîä áëîêèðîâîê             
 echo ===================================================================
-echo  [1] Ð—Ð°Ð¿ÑƒÑÑ‚Ð¸Ñ‚ÑŒ ÑÑ‚Ð°Ð½Ð´Ð°Ñ€Ñ‚Ð½Ñ‹Ð¹ Ð¾Ð±Ñ…Ð¾Ð´ (Ñ€Ð°Ð·Ñ€ÐµÐ· 2 Ð±Ð°Ð¹Ñ‚Ð°, FACEIT / CS2 safe)
-echo  [2] Ð—Ð°Ð¿ÑƒÑÑ‚Ð¸Ñ‚ÑŒ Ð°Ð³Ñ€ÐµÑÑÐ¸Ð²Ð½Ñ‹Ð¹ Ñ€ÐµÐ¶Ð¸Ð¼ (Ñ€Ð°Ð·Ñ€ÐµÐ· 1 Ð±Ð°Ð¹Ñ‚, ÑƒÑÐ¸Ð»ÐµÐ½Ð½Ñ‹Ð¹ Ð¢Ð¡ÐŸÐ£ Ð¾Ð±Ñ…Ð¾Ð´)
-echo  [3] ÐžÑ‚ÐºÑ€Ñ‹Ñ‚ÑŒ ÐºÐ¾Ð½Ñ„Ð¸Ð³ÑƒÑ€Ð°Ñ†Ð¸ÑŽ config.ini Ð² Ð‘Ð»Ð¾ÐºÐ½Ð¾Ñ‚Ðµ
-echo  [4] ÐžÑÑ‚Ð°Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ Ð²ÑÐµ Ð¿Ñ€Ð¾Ñ†ÐµÑÑÑ‹ Ð¾Ð±Ñ…Ð¾Ð´Ð° Ð¸ Ð¾Ñ‡Ð¸ÑÑ‚Ð¸Ñ‚ÑŒ ÑÐ»ÑƒÐ¶Ð±Ñƒ
-echo  [5] Ð’Ñ‹Ñ…Ð¾Ð´
+echo  [1] Çàïóñòèòü ñòàíäàðòíûé îáõîä (ðàçðåç 2 áàéòà, áåçîïàñåí äëÿ CS2)
+echo  [2] Çàïóñòèòü àãðåññèâíûé ðåæèì (ðàçðåç 1 áàéò, óñèëåííûé îáõîä)
+echo  [3] Îòêðûòü êîíôèãóðàöèþ config.ini â Áëîêíîòå
+echo  [4] Îñòàíîâèòü âñå ïðîöåññû îáõîäà è î÷èñòèòü ñëóæáó
+echo  [5] Âûõîä
 echo ===================================================================
-set /p choice="Ð’Ñ‹Ð±ÐµÑ€Ð¸Ñ‚Ðµ Ð´ÐµÐ¹ÑÑ‚Ð²Ð¸Ðµ [1-5]: "
+set /p choice="Âûáåðèòå äåéñòâèå [1-5]: "
 
 if "%choice%"=="1" goto START_STANDARD
 if "%choice%"=="2" goto START_AGGRESSIVE
@@ -35,30 +32,24 @@ if "%choice%"=="3" goto EDIT_CONFIG
 if "%choice%"=="4" goto STOP_ALL
 if "%choice%"=="5" goto EXIT_APP
 
-echo.
-echo [!] ÐÐµÐ²ÐµÑ€Ð½Ñ‹Ð¹ Ð²Ñ‹Ð±Ð¾Ñ€. ÐŸÐ¾Ð¶Ð°Ð»ÑƒÐ¹ÑÑ‚Ð°, Ð²Ð²ÐµÐ´Ð¸Ñ‚Ðµ Ñ‡Ð¸ÑÐ»Ð¾ Ð¾Ñ‚ 1 Ð´Ð¾ 5.
+echo [!] Íåâåðíûé âûáîð. Ââåäèòå ÷èñëî îò 1 äî 5.
 timeout /t 2 >nul
 goto MENU
 
 :CHECK_FILES
-set MISSING=0
 if not exist "dpi_bypass.exe" (
-    echo [ÐšÐ Ð˜Ð¢Ð˜Ð§Ð•Ð¡ÐšÐÐ¯ ÐžÐ¨Ð˜Ð‘ÐšÐ] ÐÐµ Ð½Ð°Ð¹Ð´ÐµÐ½ Ð¸ÑÐ¿Ð¾Ð»Ð½ÑÐµÐ¼Ñ‹Ð¹ Ñ„Ð°Ð¹Ð» dpi_bypass.exe!
-    echo Ð’Ñ‹Ð¿Ð¾Ð»Ð½Ð¸Ñ‚Ðµ ÑÐ±Ð¾Ñ€ÐºÑƒ Ð¿Ñ€Ð¾ÐµÐºÑ‚Ð° Ñ‡ÐµÑ€ÐµÐ· build.bat Ð¸Ð»Ð¸ CMake Ð¿ÐµÑ€ÐµÐ´ Ð·Ð°Ð¿ÑƒÑÐºÐ¾Ð¼.
-    set MISSING=1
+    echo [ÎØÈÁÊÀ] Íå íàéäåí ôàéë dpi_bypass.exe!
+    pause
+    goto MENU
 )
 if not exist "WinDivert.dll" (
-    echo [ÐšÐ Ð˜Ð¢Ð˜Ð§Ð•Ð¡ÐšÐÐ¯ ÐžÐ¨Ð˜Ð‘ÐšÐ] ÐÐµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð° Ð±Ð¸Ð±Ð»Ð¸Ð¾Ñ‚ÐµÐºÐ° WinDivert.dll Ð² Ð¿Ð°Ð¿ÐºÐµ Ð¿Ñ€Ð¾Ð³Ñ€Ð°Ð¼Ð¼Ñ‹!
-    set MISSING=1
+    echo [ÎØÈÁÊÀ] Íå íàéäåí ôàéë WinDivert.dll!
+    pause
+    goto MENU
 )
 if not exist "WinDivert64.sys" (
-    echo [ÐšÐ Ð˜Ð¢Ð˜Ð§Ð•Ð¡ÐšÐÐ¯ ÐžÐ¨Ð˜Ð‘ÐšÐ] ÐÐµ Ð½Ð°Ð¹Ð´ÐµÐ½ Ð´Ñ€Ð°Ð¹Ð²ÐµÑ€ ÑÐ´Ñ€Ð° WinDivert64.sys Ð² Ð¿Ð°Ð¿ÐºÐµ Ð¿Ñ€Ð¾Ð³Ñ€Ð°Ð¼Ð¼Ñ‹!
-    set MISSING=1
-)
-if %MISSING% neq 0 (
-    echo.
-    echo ÐÐ°Ð¶Ð¼Ð¸Ñ‚Ðµ Ð»ÑŽÐ±ÑƒÑŽ ÐºÐ»Ð°Ð²Ð¸ÑˆÑƒ Ð´Ð»Ñ Ð²Ð¾Ð·Ð²Ñ€Ð°Ñ‚Ð° Ð² Ð¼ÐµÐ½ÑŽ...
-    pause >nul
+    echo [ÎØÈÁÊÀ] Íå íàéäåí ôàéë WinDivert64.sys!
+    pause
     goto MENU
 )
 goto :eof
@@ -66,49 +57,46 @@ goto :eof
 :START_STANDARD
 call :CHECK_FILES
 cls
-echo [+] Ð—Ð°Ð¿ÑƒÑÐº ÑÑ‚Ð°Ð½Ð´Ð°Ñ€Ñ‚Ð½Ð¾Ð³Ð¾ Ñ€ÐµÐ¶Ð¸Ð¼Ð° Ð¾Ð±Ñ…Ð¾Ð´Ð° DPI (split-pos = 2 Ð±Ð°Ð¹Ñ‚Ð°)...
-echo [i] UDP Ñ‚Ñ€Ð°Ñ„Ð¸Ðº (FACEIT Anti-Cheat, CS2, Discord) Ð°Ð¿Ð¿Ð°Ñ€Ð°Ñ‚Ð½Ð¾ Ð¸Ð·Ð¾Ð»Ð¸Ñ€Ð¾Ð²Ð°Ð½.
-echo [i] Ð”Ð»Ñ Ð¾ÑÑ‚Ð°Ð½Ð¾Ð²ÐºÐ¸ Ð½Ð°Ð¶Ð¼Ð¸Ñ‚Ðµ Ctrl + C Ð² Ð¾ÐºÐ½Ðµ ÑƒÑ‚Ð¸Ð»Ð¸Ñ‚Ñ‹.
+echo [+] Çàïóñê ñòàíäàðòíîãî ðåæèìà îáõîäà (split-pos = 2 áàéòà)...
+echo [i] UDP òðàôèê (CS2, FACEIT, Discord) àïïàðàòíî èçîëèðîâàí.
+echo [i] Äëÿ îñòàíîâêè íàæìèòå Ctrl + C â îêíå óòèëèòû.
 echo.
 dpi_bypass.exe --split-pos 2 --config config.ini
 echo.
-echo Ð¡Ð»ÑƒÐ¶Ð±Ð° Ð·Ð°Ð²ÐµÑ€ÑˆÐ¸Ð»Ð° Ñ€Ð°Ð±Ð¾Ñ‚Ñƒ.
+echo Ñëóæáà çàâåðøèëà ðàáîòó.
 pause
 goto MENU
 
 :START_AGGRESSIVE
 call :CHECK_FILES
 cls
-echo [+] Ð—Ð°Ð¿ÑƒÑÐº Ð°Ð³Ñ€ÐµÑÑÐ¸Ð²Ð½Ð¾Ð³Ð¾ Ñ€ÐµÐ¶Ð¸Ð¼Ð° Ð¾Ð±Ñ…Ð¾Ð´Ð° DPI (split-pos = 1 Ð±Ð°Ð¹Ñ‚)...
-echo [i] Ð­Ñ„Ñ„ÐµÐºÑ‚Ð¸Ð²ÐµÐ½ Ð¿Ñ€Ð¾Ñ‚Ð¸Ð² Ð³Ð»ÑƒÐ±Ð¾ÐºÐ¸Ñ… ÑÐ²Ñ€Ð¸ÑÑ‚Ð¸Ðº Ð¢Ð¡ÐŸÐ£ Ð¸ Ð·Ð°Ð¼ÐµÐ´Ð»ÐµÐ½Ð¸Ð¹.
-echo [i] Ð”Ð»Ñ Ð¾ÑÑ‚Ð°Ð½Ð¾Ð²ÐºÐ¸ Ð½Ð°Ð¶Ð¼Ð¸Ñ‚Ðµ Ctrl + C Ð² Ð¾ÐºÐ½Ðµ ÑƒÑ‚Ð¸Ð»Ð¸Ñ‚Ñ‹.
+echo [+] Çàïóñê àãðåññèâíîãî ðåæèìà (split-pos = 1 áàéò)...
+echo [i] Ýôôåêòèâåí ïðîòèâ æåñòêèõ áëîêèðîâîê ÒÑÏÓ.
+echo [i] Äëÿ îñòàíîâêè íàæìèòå Ctrl + C â îêíå óòèëèòû.
 echo.
 dpi_bypass.exe --split-pos 1 --config config.ini
 echo.
-echo Ð¡Ð»ÑƒÐ¶Ð±Ð° Ð·Ð°Ð²ÐµÑ€ÑˆÐ¸Ð»Ð° Ñ€Ð°Ð±Ð¾Ñ‚Ñƒ.
+echo Ñëóæáà çàâåðøèëà ðàáîòó.
 pause
 goto MENU
 
 :EDIT_CONFIG
 if not exist "config.ini" (
-    echo [!] Ð¤Ð°Ð¹Ð» config.ini Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½. Ð¡Ð¾Ð·Ð´Ð°Ð½Ð¸Ðµ ÑˆÐ°Ð±Ð»Ð¾Ð½Ð°...
-    (
-        echo [General]
-        echo split_position = 2
-        echo target_ports = 80, 443
-        echo isolate_game_udp = true
-    ) > config.ini
+    echo [General] > config.ini
+    echo split_position = 2 >> config.ini
+    echo target_ports = 80, 443 >> config.ini
+    echo isolate_game_udp = true >> config.ini
 )
 start notepad.exe "config.ini"
 goto MENU
 
 :STOP_ALL
 cls
-echo [*] Ð—Ð°Ð²ÐµÑ€ÑˆÐµÐ½Ð¸Ðµ Ð°ÐºÑ‚Ð¸Ð²Ð½Ñ‹Ñ… Ð¿Ñ€Ð¾Ñ†ÐµÑÑÐ¾Ð² dpi_bypass.exe...
+echo [*] Çàâåðøåíèå ïðîöåññîâ dpi_bypass.exe...
 taskkill /F /IM dpi_bypass.exe >nul 2>&1
 net stop "WinDivert" >nul 2>&1
 net stop "WinDivert1.4" >nul 2>&1
-echo [OK] Ð’ÑÐµ Ð¿Ñ€Ð¾Ñ†ÐµÑÑÑ‹ Ð¸ Ð´Ñ€Ð°Ð¹Ð²ÐµÑ€Ñ‹ WinDivert ÑƒÑÐ¿ÐµÑˆÐ½Ð¾ Ð¾ÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½Ñ‹.
+echo [OK] Âñå ïðîöåññû è äðàéâåðû WinDivert óñïåøíî îñòàíîâëåíû.
 timeout /t 2 >nul
 goto MENU
 
