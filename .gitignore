@@ -1,0 +1,15 @@
+# Visual Studio / MSVC
+*.obj
+*.ilk
+*.pdb
+*.idb
+*.exp
+.vs/
+build/
+x64/
+Debug/
+Release/
+
+# Logs & temp
+*.log
+*.tmp
