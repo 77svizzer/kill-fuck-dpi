@@ -1,5 +1,6 @@
 @echo off
 setlocal
+cd /d "%~dp0"
 chcp 1251 >nul
 title KILL F#CK DPI - Панель управления
 
@@ -7,11 +8,9 @@ title KILL F#CK DPI - Панель управления
 net session >nul 2>&1
 if %errorlevel% neq 0 (
     echo [i] Запрос прав Администратора...
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/k cd /d """%~dp0""" && call """%~f0"""' -Verb RunAs"
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/c', '""%~f0""' -Verb RunAs"
     exit /b
 )
-
-cd /d "%~dp0"
 
 :MENU
 cls
