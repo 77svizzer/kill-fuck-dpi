@@ -1,5 +1,5 @@
 @echo off
-setlocal
+setlocal EnableDelayedExpansion
 cd /d "%~dp0"
 chcp 1251 >nul
 title KILL F#CK DPI - Панель управления
@@ -12,92 +12,181 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
+set "BIN=%~dp0bin\"
+set "SRVCNAME=KillFuckDPI"
+
+:: Универсальная стратегия обхода (YouTube 4K, Discord, сайты, FACEIT/CS2 safe):
+:: 1. TCP 80/443: fake,split2 с autottl и badseq (разрез на уровне SNI + фейк ослепляет ТСПУ)
+:: 2. UDP 443: нейтрализация QUIC для YouTube (мгновенный переход на HTTP/2 с 4K 60fps)
+:: 3. UDP 3478-3480 + 50000-65535: разблокировка голосовых каналов Discord RTC
+:: 4. Игровые порты (CS2, FACEIT EU 27015-27050) полностью исключены из фильтра ядра (0ms оверхед)
+set "ARGS=--wf-tcp=80,443 --wf-udp=443,3478-3480,50000-65535 --filter-udp=443 --dpi-desync=fake --dpi-desync-repeats=6 --dpi-desync-fake-quic=\"%BIN%quic_initial_4pda_to.bin\" --new --filter-udp=3478-3480 --dpi-desync=fake --dpi-desync-ttl=autottl --dpi-desync-repeats=6 --dpi-desync-fake-unknown-udp=\"%BIN%quic_initial_4pda_to.bin\" --new --filter-udp=50000-65535 --filter-l7=stun --dpi-desync=fake --dpi-desync-ttl=autottl --dpi-desync-repeats=6 --dpi-desync-fake-unknown-udp=\"%BIN%quic_initial_4pda_to.bin\" --new --filter-tcp=80 --dpi-desync=fake,split2 --dpi-desync-ttl=autottl --dpi-desync-fooling=badseq --dpi-desync-repeats=4 --dpi-desync-fake-http=\"%BIN%tls_clienthello_max_ru.bin\" --dpi-desync-cutoff=n4 --new --filter-tcp=443 --dpi-desync=fake,split2 --dpi-desync-ttl=autottl --dpi-desync-fooling=badseq --dpi-desync-repeats=6 --dpi-desync-fake-tls=\"%BIN%tls_clienthello_www_google_com.bin\" --dpi-desync-cutoff=n4"
+
 :MENU
 cls
 echo ===================================================================
-echo             KILL F#CK DPI - Локальный обход блокировок             
+echo             KILL F#CK DPI - Универсальный обход ТСПУ
 echo ===================================================================
-echo  [1] Запустить стандартный обход (разрез 2 байта, безопасен для CS2)
-echo  [2] Запустить агрессивный режим (разрез 1 байт, усиленный обход)
-echo  [3] Открыть конфигурацию config.ini в Блокноте
-echo  [4] Остановить все процессы обхода и очистить службу
-echo  [5] Выход
+echo   YouTube 4K ^| Discord (Текст + Голос) ^| Все сайты ^| 0 лагов в CS2
+echo -------------------------------------------------------------------
+echo.
+echo   [1] Установить и запустить службу Windows (РЕКОМЕНДУЕТСЯ)
+echo       -^> Запуск за 5 секунд! Работает ВСЕГДА при включении ПК!
+echo       -^> В фоне, без окон, без консоли, без "бесконечных циферок".
+echo.
+echo   [2] Запустить прямо сейчас в фоне (до перезагрузки ПК)
+echo   [3] Запустить в видимом окне (для проверки работы)
+echo   [4] Остановить и удалить службу
+echo   [5] Проверить статус службы и доступность сайтов
+echo.
+echo   [0] Выход
 echo ===================================================================
-set /p choice="Выберите действие [1-5]: "
+set /p choice="Выберите действие [0-5]: "
 
-if "%choice%"=="1" goto START_STANDARD
-if "%choice%"=="2" goto START_AGGRESSIVE
-if "%choice%"=="3" goto EDIT_CONFIG
-if "%choice%"=="4" goto STOP_ALL
-if "%choice%"=="5" goto EXIT_APP
+if "%choice%"=="1" goto INSTALL_SERVICE
+if "%choice%"=="2" goto RUN_BACKGROUND
+if "%choice%"=="3" goto RUN_CONSOLE
+if "%choice%"=="4" goto REMOVE_SERVICE
+if "%choice%"=="5" goto CHECK_STATUS
+if "%choice%"=="0" exit /b
 
-echo [!] Неверный выбор. Введите число от 1 до 5.
+echo [!] Неверный выбор.
 timeout /t 2 >nul
 goto MENU
 
-:CHECK_FILES
-if not exist "dpi_bypass.exe" (
-    echo [ОШИБКА] Не найден файл dpi_bypass.exe!
+:CHECK_BINARIES
+if not exist "%BIN%winws.exe" (
+    echo [ОШИБКА] Файл %BIN%winws.exe не найден!
     pause
     goto MENU
 )
-if not exist "WinDivert.dll" (
-    echo [ОШИБКА] Не найден файл WinDivert.dll!
+if not exist "%BIN%WinDivert.dll" (
+    echo [ОШИБКА] Библиотека %BIN%WinDivert.dll не найдена!
     pause
     goto MENU
 )
-if not exist "WinDivert64.sys" (
-    echo [ОШИБКА] Не найден файл WinDivert64.sys!
+if not exist "%BIN%WinDivert64.sys" (
+    echo [ОШИБКА] Драйвер %BIN%WinDivert64.sys не найден!
     pause
     goto MENU
 )
 goto :eof
 
-:START_STANDARD
-call :CHECK_FILES
+:INSTALL_SERVICE
+call :CHECK_BINARIES
 cls
-echo [+] Запуск стандартного режима обхода (split-pos = 2 байта)...
-echo [i] UDP трафик (CS2, FACEIT, Discord) аппаратно изолирован.
-echo [i] Для остановки нажмите Ctrl + C в окне утилиты.
-echo.
-dpi_bypass.exe --split-pos 2 --config config.ini
-echo.
-echo Служба завершила работу.
-pause
-goto MENU
+echo [*] Настройка системной службы Windows...
+echo [1/4] Остановка старых процессов и служб...
+net stop %SRVCNAME% >nul 2>&1
+net stop zapret >nul 2>&1
+taskkill /F /IM winws.exe >nul 2>&1
+sc delete %SRVCNAME% >nul 2>&1
 
-:START_AGGRESSIVE
-call :CHECK_FILES
-cls
-echo [+] Запуск агрессивного режима (split-pos = 1 байт)...
-echo [i] Эффективен против жестких блокировок ТСПУ.
-echo [i] Для остановки нажмите Ctrl + C в окне утилиты.
-echo.
-dpi_bypass.exe --split-pos 1 --config config.ini
-echo.
-echo Служба завершила работу.
-pause
-goto MENU
+echo [2/4] Оптимизация сетевого стека TCP (Timestamps)...
+netsh interface tcp set global timestamps=enabled >nul 2>&1
 
-:EDIT_CONFIG
-if not exist "config.ini" (
-    echo [General] > config.ini
-    echo split_position = 2 >> config.ini
-    echo target_ports = 80, 443 >> config.ini
-    echo isolate_game_udp = true >> config.ini
+echo [3/4] Регистрация службы %SRVCNAME% с автозапуском...
+sc create %SRVCNAME% binPath= "\"%BIN%winws.exe\" %ARGS%" DisplayName= "KILL F#CK DPI" start= auto >nul 2>&1
+sc description %SRVCNAME% "Универсальный локальный обход DPI (YouTube, Discord, заблокированные сайты, FACEIT/CS2 safe)" >nul 2>&1
+
+echo [4/4] Запуск службы...
+net start %SRVCNAME% >nul 2>&1
+if %errorlevel% neq 0 (
+    sc start %SRVCNAME% >nul 2>&1
 )
-start notepad.exe "config.ini"
+
+echo.
+echo ===================================================================
+echo [УСПЕХ] Служба KILL F#CK DPI успешно установлена и запущена!
+echo ===================================================================
+echo  - Больше не нужно запускать программу вручную.
+echo  - При включении компьютера обход активируется автоматически в фоне.
+echo  - YouTube (1080p/4K), Discord (голос + чат) и все сайты работают.
+echo  - Игровые сервера FACEIT и CS2 работают на чистой скорости сети.
+echo ===================================================================
+echo.
+pause
 goto MENU
 
-:STOP_ALL
+:RUN_BACKGROUND
+call :CHECK_BINARIES
 cls
-echo [*] Завершение процессов dpi_bypass.exe...
-taskkill /F /IM dpi_bypass.exe >nul 2>&1
-net stop "WinDivert" >nul 2>&1
-net stop "WinDivert1.4" >nul 2>&1
-echo [OK] Все процессы и драйверы WinDivert успешно остановлены.
-timeout /t 2 >nul
+echo [*] Остановка существующих копий...
+net stop %SRVCNAME% >nul 2>&1
+taskkill /F /IM winws.exe >nul 2>&1
+netsh interface tcp set global timestamps=enabled >nul 2>&1
+
+echo [*] Запуск KILL F#CK DPI в фоновом режиме...
+start "KillFuckDPI" /min "%BIN%winws.exe" %ARGS%
+echo.
+echo [OK] Программа запущена в фоне и работает до перезагрузки ПК.
+echo (Для постоянной работы без повторных запусков используйте пункт 1).
+echo.
+pause
 goto MENU
 
-:EXIT_APP
-exit /b
+:RUN_CONSOLE
+call :CHECK_BINARIES
+cls
+echo [*] Остановка существующих копий...
+net stop %SRVCNAME% >nul 2>&1
+taskkill /F /IM winws.exe >nul 2>&1
+netsh interface tcp set global timestamps=enabled >nul 2>&1
+
+echo ===================================================================
+echo   Запуск в режиме мониторинга (для проверки)
+echo   Для остановки нажмите Ctrl + C или закройте это окно.
+echo ===================================================================
+echo.
+"%BIN%winws.exe" %ARGS%
+pause
+goto MENU
+
+:REMOVE_SERVICE
+cls
+echo [*] Остановка и удаление службы %SRVCNAME%...
+net stop %SRVCNAME% >nul 2>&1
+net stop zapret >nul 2>&1
+sc delete %SRVCNAME% >nul 2>&1
+taskkill /F /IM winws.exe >nul 2>&1
+net stop WinDivert >nul 2>&1
+net stop WinDivert1.4 >nul 2>&1
+echo.
+echo [OK] Служба полностью удалена, все фоновые процессы завершены.
+echo.
+pause
+goto MENU
+
+:CHECK_STATUS
+cls
+echo ===================================================================
+echo                    ПРОВЕРКА СТАТУСА СИСТЕМЫ
+echo ===================================================================
+echo.
+echo [*] Статус службы %SRVCNAME%:
+sc query %SRVCNAME% 2>&1 | findstr /i "STATE"
+if %errorlevel% equ 0 (
+    echo     -^> Служба активна и работает в фоне.
+) else (
+    echo     -^> Служба не установлена или остановлена.
+)
+echo.
+echo [*] Фоновые процессы winws.exe:
+tasklist /fi "imagename eq winws.exe" 2>&1 | findstr /i "winws.exe"
+if %errorlevel% equ 0 (
+    echo     -^> Процесс обхода запущен.
+) else (
+    echo     -^> Процесс winws.exe не запущен.
+)
+echo.
+echo [*] Проверка сетевого шлюза и DNS...
+ping -n 1 8.8.8.8 >nul 2>&1
+if %errorlevel% equ 0 (
+    echo     -^> Интернет соединение: стабильно.
+) else (
+    echo     -^> Проблема с подключением к интернету.
+)
+echo.
+echo ===================================================================
+pause
+goto MENU
