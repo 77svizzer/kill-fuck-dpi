@@ -15,12 +15,12 @@ if %errorlevel% neq 0 (
 set "BIN=%~dp0bin\"
 set "SRVCNAME=KillFuckDPI"
 
-:: Универсальная стратегия обхода (YouTube 4K, Discord, сайты, FACEIT/CS2 safe):
-:: 1. TCP 80/443: fake,split2 с autottl и badseq (разрез на уровне SNI + фейк ослепляет ТСПУ)
+:: Проверенная рабочая универсальная конфигурация:
+:: 1. TCP 80/443: fake,fakedsplit с autottl и ts (разрез по SNI + фейк ослепляет ТСПУ)
 :: 2. UDP 443: нейтрализация QUIC для YouTube (мгновенный переход на HTTP/2 с 4K 60fps)
-:: 3. UDP 3478-3480 + 50000-65535: разблокировка голосовых каналов Discord RTC
+:: 3. UDP 19294-19344, 50000-50100: разблокировка голосовых каналов Discord (STUN + RTC)
 :: 4. Игровые порты (CS2, FACEIT EU 27015-27050) полностью исключены из фильтра ядра (0ms оверхед)
-set "ARGS=--wf-tcp=80,443 --wf-udp=443,3478-3480,50000-65535 --filter-udp=443 --dpi-desync=fake --dpi-desync-repeats=6 --dpi-desync-fake-quic=\"%BIN%quic_initial_4pda_to.bin\" --new --filter-udp=3478-3480 --dpi-desync=fake --dpi-desync-ttl=autottl --dpi-desync-repeats=6 --dpi-desync-fake-unknown-udp=\"%BIN%quic_initial_4pda_to.bin\" --new --filter-udp=50000-65535 --filter-l7=stun --dpi-desync=fake --dpi-desync-ttl=autottl --dpi-desync-repeats=6 --dpi-desync-fake-unknown-udp=\"%BIN%quic_initial_4pda_to.bin\" --new --filter-tcp=80 --dpi-desync=fake,split2 --dpi-desync-ttl=autottl --dpi-desync-fooling=badseq --dpi-desync-repeats=4 --dpi-desync-fake-http=\"%BIN%tls_clienthello_max_ru.bin\" --dpi-desync-cutoff=n4 --new --filter-tcp=443 --dpi-desync=fake,split2 --dpi-desync-ttl=autottl --dpi-desync-fooling=badseq --dpi-desync-repeats=6 --dpi-desync-fake-tls=\"%BIN%tls_clienthello_www_google_com.bin\" --dpi-desync-cutoff=n4"
+set ARGS=--wf-tcp=80,443 --wf-udp=443,19294-19344,50000-50100 --filter-udp=443 --dpi-desync=fake --dpi-desync-repeats=6 --dpi-desync-fake-quic="%BIN%quic_initial_www_google_com.bin" --new --filter-udp=19294-19344,50000-50100 --filter-l7=discord,stun --dpi-desync=fake --dpi-desync-fake-discord="%BIN%ACTIVE_DISCORD_UDP.bin" --dpi-desync-fake-stun="%BIN%ACTIVE_DISCORD_UDP.bin" --dpi-desync-repeats=6 --new --filter-tcp=80,443,2053,2083,2087,2096,8443 --dpi-desync=fake,fakedsplit --dpi-desync-repeats=6 --dpi-desync-fooling=ts --dpi-desync-fakedsplit-pattern=0x00 --dpi-desync-fake-tls="%BIN%tls_clienthello_www_google_com.bin" --dpi-desync-fake-http="%BIN%tls_clienthello_www_sferum_ru.bin"
 
 :MENU
 cls
@@ -35,9 +35,9 @@ echo       -^> Запуск за 5 секунд! Работает ВСЕГДА при включении ПК!
 echo       -^> В фоне, без окон, без консоли, без "бесконечных циферок".
 echo.
 echo   [2] Запустить прямо сейчас в фоне (до перезагрузки ПК)
-echo   [3] Запустить в видимом окне (для проверки работы)
-echo   [4] Остановить и удалить службу
-echo   [5] Проверить статус службы и доступность сайтов
+echo   [3] Запустить в окне (для наглядной проверки работы)
+echo   [4] Остановить и полностью удалить службу
+echo   [5] Проверить доступность (YouTube, Discord, CS2/FACEIT)
 echo.
 echo   [0] Выход
 echo ===================================================================
@@ -86,8 +86,11 @@ echo [2/4] Оптимизация сетевого стека TCP (Timestamps)...
 netsh interface tcp set global timestamps=enabled >nul 2>&1
 
 echo [3/4] Регистрация службы %SRVCNAME% с автозапуском...
-sc create %SRVCNAME% binPath= "\"%BIN%winws.exe\" %ARGS%" DisplayName= "KILL F#CK DPI" start= auto >nul 2>&1
-sc description %SRVCNAME% "Универсальный локальный обход DPI (YouTube, Discord, заблокированные сайты, FACEIT/CS2 safe)" >nul 2>&1
+sc create %SRVCNAME% binPath= "\"%BIN%winws.exe\"" DisplayName= "KILL F#CK DPI" start= auto >nul 2>&1
+sc description %SRVCNAME% "Универсальный локальный обход DPI (YouTube 4K, Discord, сайты, FACEIT/CS2 safe)" >nul 2>&1
+
+:: Установка точной строки ImagePath в реестре
+reg add "HKLM\System\CurrentControlSet\Services\%SRVCNAME%" /v ImagePath /t REG_EXPAND_SZ /d "\"%BIN%winws.exe\" %ARGS%" /f >nul 2>&1
 
 echo [4/4] Запуск службы...
 net start %SRVCNAME% >nul 2>&1
@@ -117,7 +120,9 @@ taskkill /F /IM winws.exe >nul 2>&1
 netsh interface tcp set global timestamps=enabled >nul 2>&1
 
 echo [*] Запуск KILL F#CK DPI в фоновом режиме...
+cd /d "%BIN%"
 start "KillFuckDPI" /min "%BIN%winws.exe" %ARGS%
+cd /d "%~dp0"
 echo.
 echo [OK] Программа запущена в фоне и работает до перезагрузки ПК.
 echo (Для постоянной работы без повторных запусков используйте пункт 1).
@@ -138,7 +143,9 @@ echo   Запуск в режиме мониторинга (для проверки)
 echo   Для остановки нажмите Ctrl + C или закройте это окно.
 echo ===================================================================
 echo.
-"%BIN%winws.exe" %ARGS%
+cd /d "%BIN%"
+winws.exe %ARGS%
+cd /d "%~dp0"
 pause
 goto MENU
 
@@ -159,34 +166,14 @@ goto MENU
 
 :CHECK_STATUS
 cls
-echo ===================================================================
-echo                    ПРОВЕРКА СТАТУСА СИСТЕМЫ
-echo ===================================================================
-echo.
-echo [*] Статус службы %SRVCNAME%:
-sc query %SRVCNAME% 2>&1 | findstr /i "STATE"
-if %errorlevel% equ 0 (
-    echo     -^> Служба активна и работает в фоне.
+if exist "%~dp0verify.ps1" (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0verify.ps1"
 ) else (
-    echo     -^> Служба не установлена или остановлена.
+    echo [*] Проверка сетевого соединения...
+    ping -n 1 8.8.8.8 >nul 2>&1
+    if !errorlevel! equ 0 (
+        echo [OK] Интернет соединение активно.
+    )
 )
-echo.
-echo [*] Фоновые процессы winws.exe:
-tasklist /fi "imagename eq winws.exe" 2>&1 | findstr /i "winws.exe"
-if %errorlevel% equ 0 (
-    echo     -^> Процесс обхода запущен.
-) else (
-    echo     -^> Процесс winws.exe не запущен.
-)
-echo.
-echo [*] Проверка сетевого шлюза и DNS...
-ping -n 1 8.8.8.8 >nul 2>&1
-if %errorlevel% equ 0 (
-    echo     -^> Интернет соединение: стабильно.
-) else (
-    echo     -^> Проблема с подключением к интернету.
-)
-echo.
-echo ===================================================================
 pause
 goto MENU
