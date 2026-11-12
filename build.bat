@@ -33,8 +33,8 @@ echo [+] Setting up MSVC environment...
 call "%VCVARS%" >nul 2>&1
 
 :DO_BUILD
-echo [*] Compiling src\main.cpp -> dpi_bypass.exe...
-cl.exe /nologo /EHsc /O2 /utf-8 /std:c++17 /Iinclude src\main.cpp /link /LIBPATH:lib WinDivert.lib ws2_32.lib advapi32.lib /OUT:dpi_bypass.exe
+echo [*] Compiling modular C++17 engine -> dpi_bypass.exe...
+cl.exe /nologo /EHsc /O2 /utf-8 /std:c++17 /Iinclude src\main.cpp src\ProtocolParser.cpp src\DesyncEngine.cpp src\ConfigManager.cpp src\ServiceController.cpp /link /LIBPATH:lib WinDivert.lib ws2_32.lib advapi32.lib shell32.lib /OUT:dpi_bypass.exe
 
 if %errorlevel% equ 0 (
     echo.
@@ -42,7 +42,7 @@ if %errorlevel% equ 0 (
     echo [OK] Build successful: dpi_bypass.exe created!
     echo Run start.bat to launch and configure.
     echo ===================================================================
-    del /q main.obj >nul 2>&1
+    del /q *.obj >nul 2>&1
 ) else (
     echo.
     echo [ERROR] Compilation failed.

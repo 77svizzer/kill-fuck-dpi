@@ -1,13 +1,13 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-chcp 1251 >nul
-title KILL F#CK DPI - Панель управления (Native C++)
+chcp 65001 >nul
+title KILL F#CK DPI - РџР°РЅРµР»СЊ СѓРїСЂР°РІР»РµРЅРёСЏ
 
-:: Проверка прав Администратора
+:: РџСЂРѕРІРµСЂРєР° РїСЂР°РІ РђРґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂР°
 net session >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [i] Запрос прав Администратора...
+    echo [i] Р—Р°РїСЂРѕСЃ РїСЂР°РІ РђРґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂР°...
     powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/c', '""%~f0""' -Verb RunAs"
     exit /b
 )
@@ -15,23 +15,23 @@ if %errorlevel% neq 0 (
 :MENU
 cls
 echo ===================================================================
-echo             KILL F#CK DPI - Автономный C++ обход ТСПУ
+echo             KILL F#CK DPI - РђРІС‚РѕРЅРѕРјРЅС‹Р№ C++ РѕР±С…РѕРґ РўРЎРџРЈ
 echo ===================================================================
-echo   YouTube 4K | Discord | Xplay / CS2 / FACEIT | Без winws и zapret
+echo   YouTube 4K | Discord | CS2 / FACEIT / Xplay | Р‘РµР· winws Рё zapret
 echo -------------------------------------------------------------------
 echo.
-echo   [1] Установить и запустить службу Windows (РЕКОМЕНДУЕТСЯ)
-echo       -^> Запуск за 5 секунд! Работает ВСЕГДА при включении ПК!
-echo       -^> В тихом фоне, без консоли, без "бесконечных циферок".
+echo   [1] РЈСЃС‚Р°РЅРѕРІРёС‚СЊ Рё Р·Р°РїСѓСЃС‚РёС‚СЊ СЃР»СѓР¶Р±Сѓ Windows (Р Р•РљРћРњР•РќР”РЈР•РўРЎРЇ)
+echo       -^> РђРІС‚РѕР·Р°РїСѓСЃРє РІ С‚РёС…РѕРј С„РѕРЅРµ РїСЂРё РІРєР»СЋС‡РµРЅРёРё РџРљ.
+echo       -^> 0ms Р·Р°РґРµСЂР¶РєРё РґР»СЏ РёРіСЂ, Р±РµР· РєРѕРЅСЃРѕР»СЊРЅС‹С… РѕРєРѕРЅ.
 echo.
-echo   [2] Запустить в консольном окне (для наглядной проверки)
-echo   [3] Остановить и удалить службу
-echo   [4] Открыть файл настроек (config.ini)
-echo   [5] Проверить доступность (YouTube, Discord, CS2/FACEIT/Xplay)
+echo   [2] Р—Р°РїСѓСЃС‚РёС‚СЊ РІ РєРѕРЅСЃРѕР»СЊРЅРѕРј РѕРєРЅРµ (РґР»СЏ РЅР°РіР»СЏРґРЅРѕР№ РїСЂРѕРІРµСЂРєРё)
+echo   [3] РћСЃС‚Р°РЅРѕРІРёС‚СЊ Рё СѓРґР°Р»РёС‚СЊ СЃР»СѓР¶Р±Сѓ
+echo   [4] РћС‚РєСЂС‹С‚СЊ С„Р°Р№Р» РЅР°СЃС‚СЂРѕРµРє (config.ini)
+echo   [5] РџСЂРѕРІРµСЂРёС‚СЊ РґРѕСЃС‚СѓРїРЅРѕСЃС‚СЊ (YouTube, Discord, CS2/FACEIT/Xplay)
 echo.
-echo   [0] Выход
+echo   [0] Р’С‹С…РѕРґ
 echo ===================================================================
-set /p choice="Выберите действие [0-5]: "
+set /p choice="Р’С‹Р±РµСЂРёС‚Рµ РґРµР№СЃС‚РІРёРµ [0-5]: "
 
 if "%choice%"=="1" goto INSTALL_SERVICE
 if "%choice%"=="2" goto RUN_CONSOLE
@@ -40,24 +40,24 @@ if "%choice%"=="4" goto EDIT_CONFIG
 if "%choice%"=="5" goto CHECK_STATUS
 if "%choice%"=="0" exit /b
 
-echo [!] Неверный выбор.
+echo [!] РќРµРІРµСЂРЅС‹Р№ РІС‹Р±РѕСЂ.
 timeout /t 2 >nul
 goto MENU
 
 :CHECK_BINARIES
 if not exist "dpi_bypass.exe" (
-    echo [ОШИБКА] Файл dpi_bypass.exe не найден!
-    echo Выполните сборку через build.bat.
+    echo [РћРЁРР‘РљРђ] Р¤Р°Р№Р» dpi_bypass.exe РЅРµ РЅР°Р№РґРµРЅ!
+    echo Р’С‹РїРѕР»РЅРёС‚Рµ СЃР±РѕСЂРєСѓ С‡РµСЂРµР· build.bat.
     pause
     goto MENU
 )
 if not exist "WinDivert.dll" (
-    echo [ОШИБКА] Библиотека WinDivert.dll не найдена!
+    echo [РћРЁРР‘РљРђ] Р‘РёР±Р»РёРѕС‚РµРєР° WinDivert.dll РЅРµ РЅР°Р№РґРµРЅР°!
     pause
     goto MENU
 )
 if not exist "WinDivert64.sys" (
-    echo [ОШИБКА] Драйвер WinDivert64.sys не найден!
+    echo [РћРЁРР‘РљРђ] Р”СЂР°Р№РІРµСЂ WinDivert64.sys РЅРµ РЅР°Р№РґРµРЅ!
     pause
     goto MENU
 )
@@ -66,17 +66,15 @@ goto :eof
 :INSTALL_SERVICE
 call :CHECK_BINARIES
 cls
-echo [*] Установка автономной службы Windows...
+echo [*] РЈСЃС‚Р°РЅРѕРІРєР° Р°РІС‚РѕРЅРѕРјРЅРѕР№ СЃР»СѓР¶Р±С‹ Windows...
 dpi_bypass.exe --uninstall >nul 2>&1
 dpi_bypass.exe --install
 echo.
 echo ===================================================================
-echo [УСПЕХ] Служба KILL F#CK DPI успешно установлена и запущена!
+echo [РЈРЎРџР•РҐ] РЎР»СѓР¶Р±Р° KILL F#CK DPI СѓСЃРїРµС€РЅРѕ СѓСЃС‚Р°РЅРѕРІР»РµРЅР° Рё Р·Р°РїСѓС‰РµРЅР°!
 echo ===================================================================
-echo  - Работает нативно на C++ (без сторонних утилит, winws и zapret).
-echo  - При включении компьютера обход активируется автоматически в фоне.
-echo  - YouTube (1080p/4K), Discord, заблокированные сайты работают.
-echo  - Игровые сервера Xplay, FACEIT и CS2 работают на чистой скорости.
+echo  - YouTube (1080p/4K), Discord, Р·Р°Р±Р»РѕРєРёСЂРѕРІР°РЅРЅС‹Рµ СЃР°Р№С‚С‹ СЂР°Р±РѕС‚Р°СЋС‚.
+echo  - РЎРµСЂРІРµСЂР° Xplay, FACEIT Рё CS2 СЂР°Р±РѕС‚Р°СЋС‚ РЅР° С‡РёСЃС‚РѕР№ СЃРєРѕСЂРѕСЃС‚Рё СЏРґСЂР°.
 echo ===================================================================
 echo.
 pause
@@ -85,11 +83,10 @@ goto MENU
 :RUN_CONSOLE
 call :CHECK_BINARIES
 cls
-echo [*] Остановка фоновой службы перед запуском в консоли...
+echo [*] РћСЃС‚Р°РЅРѕРІРєР° С„РѕРЅРѕРІРѕР№ СЃР»СѓР¶Р±С‹ РїРµСЂРµРґ Р·Р°РїСѓСЃРєРѕРј РІ РєРѕРЅСЃРѕР»Рё...
 dpi_bypass.exe --stop >nul 2>&1
 echo ===================================================================
-echo   Запуск в консольном окне (для наглядности)
-echo   Для остановки нажмите Ctrl + C.
+echo   Р—Р°РїСѓСЃРє РІ РєРѕРЅСЃРѕР»СЊРЅРѕРј РѕРєРЅРµ. Р”Р»СЏ РѕСЃС‚Р°РЅРѕРІРєРё РЅР°Р¶РјРёС‚Рµ Ctrl + C.
 echo ===================================================================
 echo.
 dpi_bypass.exe
@@ -98,29 +95,30 @@ goto MENU
 
 :REMOVE_SERVICE
 cls
-echo [*] Остановка и удаление службы KILL F#CK DPI...
+echo [*] РћСЃС‚Р°РЅРѕРІРєР° Рё СѓРґР°Р»РµРЅРёРµ СЃР»СѓР¶Р±С‹ KILL F#CK DPI...
 dpi_bypass.exe --uninstall
 net stop WinDivert >nul 2>&1
 echo.
-echo [OK] Служба остановлена и удалена из системы.
+echo [OK] РЎР»СѓР¶Р±Р° РѕСЃС‚Р°РЅРѕРІР»РµРЅР° Рё СѓРґР°Р»РµРЅР° РёР· СЃРёСЃС‚РµРјС‹.
 echo.
 pause
 goto MENU
 
 :EDIT_CONFIG
-start notepad.exe "config.ini"
+if exist "config.ini" (
+    start notepad.exe "config.ini"
+) else (
+    echo [РћРЁРР‘РљРђ] Р¤Р°Р№Р» config.ini РЅРµ РЅР°Р№РґРµРЅ!
+    pause
+)
 goto MENU
 
 :CHECK_STATUS
 cls
-if exist "%~dp0verify.ps1" (
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0verify.ps1"
+if exist "verify.ps1" (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "verify.ps1"
 ) else (
-    echo [*] Проверка сетевого соединения...
-    ping -n 1 8.8.8.8 >nul 2>&1
-    if !errorlevel! equ 0 (
-        echo [OK] Интернет соединение активно.
-    )
+    echo [РћРЁРР‘РљРђ] Р¤Р°Р№Р» verify.ps1 РЅРµ РЅР°Р№РґРµРЅ!
 )
 pause
 goto MENU
