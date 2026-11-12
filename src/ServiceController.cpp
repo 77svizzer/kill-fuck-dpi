@@ -94,7 +94,7 @@ bool ServiceController::Install(const std::string& name, const std::string& disp
         display_name.c_str(),
         SERVICE_ALL_ACCESS,
         SERVICE_WIN32_OWN_PROCESS,
-        SERVICE_AUTO_START,
+        SERVICE_DEMAND_START, // Запуск ТОЛЬКО по требованию пользователя, никакого автозапуска при включении ПК!
         SERVICE_ERROR_NORMAL,
         bin_path.c_str(),
         NULL, NULL, NULL, NULL, NULL
@@ -115,23 +115,40 @@ bool ServiceController::Install(const std::string& name, const std::string& disp
     return true;
 }
 
+void ServiceController::ForceUnloadWinDivertKernelDriver() {
+    SC_HANDLE scm = OpenSCManagerA(NULL, NULL, SC_MANAGER_ALL_ACCESS);
+    if (scm) {
+        for (const char* svc_name : { "WinDivert", "WinDivert14", "KillFuckDPI" }) {
+            SC_HANDLE wd = OpenServiceA(scm, svc_name, SERVICE_STOP | DELETE | SERVICE_CHANGE_CONFIG);
+            if (wd) {
+                // Отключаем автозапуск в реестре на случай сбоев удаления
+                ChangeServiceConfigA(wd, SERVICE_NO_CHANGE, SERVICE_DISABLED, SERVICE_NO_CHANGE, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+                SERVICE_STATUS st;
+                ControlService(wd, SERVICE_CONTROL_STOP, &st);
+                DeleteService(wd);
+                CloseServiceHandle(wd);
+            }
+        }
+        CloseServiceHandle(scm);
+    }
+}
+
 bool ServiceController::Uninstall(const std::string& name) {
     SC_HANDLE sc_manager = OpenSCManagerA(NULL, NULL, SC_MANAGER_ALL_ACCESS);
     if (!sc_manager) return false;
 
     SC_HANDLE service = OpenServiceA(sc_manager, name.c_str(), SERVICE_STOP | DELETE);
-    if (!service) {
-        CloseServiceHandle(sc_manager);
-        return false;
+    if (service) {
+        SERVICE_STATUS status;
+        ControlService(service, SERVICE_CONTROL_STOP, &status);
+        DeleteService(service);
+        CloseServiceHandle(service);
     }
-
-    SERVICE_STATUS status;
-    ControlService(service, SERVICE_CONTROL_STOP, &status);
-    BOOL res = DeleteService(service);
-
-    CloseServiceHandle(service);
     CloseServiceHandle(sc_manager);
-    return res == TRUE;
+
+    // Принудительно выгружаем драйвер WinDivert из ядра Windows
+    ForceUnloadWinDivertKernelDriver();
+    return true;
 }
 
 bool ServiceController::Start(const std::string& name) {
@@ -155,16 +172,16 @@ bool ServiceController::Stop(const std::string& name) {
     if (!sc_manager) return false;
 
     SC_HANDLE service = OpenServiceA(sc_manager, name.c_str(), SERVICE_STOP);
-    if (!service) {
-        CloseServiceHandle(sc_manager);
-        return false;
+    if (service) {
+        SERVICE_STATUS status;
+        ControlService(service, SERVICE_CONTROL_STOP, &status);
+        CloseServiceHandle(service);
     }
-
-    SERVICE_STATUS status;
-    BOOL res = ControlService(service, SERVICE_CONTROL_STOP, &status);
-    CloseServiceHandle(service);
     CloseServiceHandle(sc_manager);
-    return res == TRUE;
+
+    // Принудительно выгружаем драйвер WinDivert из ядра Windows
+    ForceUnloadWinDivertKernelDriver();
+    return true;
 }
 
 int ServiceController::RunAsService(const std::string& name, std::function<void()> worker_func, std::function<void()> stop_func) {

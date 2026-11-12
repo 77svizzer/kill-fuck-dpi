@@ -76,8 +76,8 @@ int GuiManager::Run(HINSTANCE hInstance, int nCmdShow) {
         40, 80, 320, 40, hwnd_main_, (HMENU)ID_BTN_TOGGLE, hInstance, NULL);
     SendMessageA(hwnd_btn_toggle_, WM_SETFONT, (WPARAM)hFont, TRUE);
 
-    // Кнопка службы Windows
-    hwnd_btn_service_ = CreateWindowExA(0, "BUTTON", "Установить службу автозапуска",
+    // Кнопка экстренного сброса сети и выгрузки WinDivert
+    hwnd_btn_service_ = CreateWindowExA(0, "BUTTON", "Экстренный сброс драйвера сети",
         WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
         40, 130, 320, 32, hwnd_main_, (HMENU)ID_BTN_SERVICE, hInstance, NULL);
     SendMessageA(hwnd_btn_service_, WM_SETFONT, (WPARAM)hFont, TRUE);
@@ -175,21 +175,10 @@ LRESULT CALLBACK GuiManager::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
                     gui.SetBypassState(true);
                 }
             } else if (wmId == ID_BTN_SERVICE) {
-                char current_exe[MAX_PATH];
-                GetModuleFileNameA(NULL, current_exe, MAX_PATH);
-                if (!gui.service_installed_) {
-                    ServiceController::Install("KillFuckDPI", "KILL F#CK DPI Service", current_exe);
-                    ServiceController::Start("KillFuckDPI");
-                    gui.service_installed_ = true;
-                    SetWindowTextA(gui.hwnd_btn_service_, "Удалить службу автозапуска");
-                    MessageBoxA(hWnd, "Служба успешно установлена и работает в фоне при включении ПК!", "Успех", MB_OK | MB_ICONINFORMATION);
-                } else {
-                    ServiceController::Stop("KillFuckDPI");
-                    ServiceController::Uninstall("KillFuckDPI");
-                    gui.service_installed_ = false;
-                    SetWindowTextA(gui.hwnd_btn_service_, "Установить службу автозапуска");
-                    MessageBoxA(hWnd, "Служба успешно удалена.", "Успех", MB_OK | MB_ICONINFORMATION);
-                }
+                stop_divert();
+                ServiceController::ForceUnloadWinDivertKernelDriver();
+                gui.SetBypassState(false);
+                MessageBoxA(hWnd, "Драйвер WinDivert успешно принудительно остановлен и выгружен из ядра Windows. Интернет работает напрямую.", "Сброс сети выполнен", MB_OK | MB_ICONINFORMATION);
             } else if (wmId == ID_BTN_CONFIG) {
                 ShellExecuteA(NULL, "open", "notepad.exe", "config.ini", NULL, SW_NORMAL);
             } else if (wmId == ID_TRAY_RESTORE) {

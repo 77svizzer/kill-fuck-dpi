@@ -12,6 +12,9 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
+:: Предварительная автоочистка от зависших служб
+call :CLEAN_SERVICES_SILENT
+
 :MENU
 cls
 echo ===================================================================
@@ -19,13 +22,13 @@ echo             KILL F#CK DPI - Автономный C++ обход ТСПУ
 echo ===================================================================
 echo   YouTube 4K | Discord | CS2 / FACEIT / Xplay | Без winws и zapret
 echo -------------------------------------------------------------------
+echo   [!] Автозапуск при старте ПК полностью отключен.
+echo   [!] При закрытии драйвер WinDivert мгновенно выгружается из ядра.
+echo ===================================================================
 echo.
-echo   [1] Установить и запустить службу Windows (РЕКОМЕНДУЕТСЯ)
-echo       -^> Автозапуск в тихом фоне при включении ПК.
-echo       -^> 0ms задержки для игр, без консольных окон.
-echo.
-echo   [2] Запустить в консольном окне (для наглядной проверки)
-echo   [3] Остановить и удалить службу
+echo   [1] Запустить обход DPI (Удобный GUI и значок в трее)
+echo   [2] Запустить в консольном окне (для наглядной проверки пакетов)
+echo   [3] Полная очистка и восстановление сети (Сброс WinDivert)
 echo   [4] Открыть файл настроек (config.ini)
 echo   [5] Проверить доступность (YouTube, Discord, CS2/FACEIT/Xplay)
 echo.
@@ -33,12 +36,12 @@ echo   [0] Выход
 echo ===================================================================
 set /p choice="Выберите действие [0-5]: "
 
-if "%choice%"=="1" goto INSTALL_SERVICE
+if "%choice%"=="1" goto RUN_GUI
 if "%choice%"=="2" goto RUN_CONSOLE
-if "%choice%"=="3" goto REMOVE_SERVICE
+if "%choice%"=="3" goto FORCE_CLEAN
 if "%choice%"=="4" goto EDIT_CONFIG
 if "%choice%"=="5" goto CHECK_STATUS
-if "%choice%"=="0" exit /b
+if "%choice%"=="0" goto EXIT_APP
 
 echo [!] Неверный выбор.
 timeout /t 2 >nul
@@ -63,43 +66,48 @@ if not exist "WinDivert64.sys" (
 )
 goto :eof
 
-:INSTALL_SERVICE
+:CLEAN_SERVICES_SILENT
+sc.exe stop KillFuckDPI >nul 2>&1
+sc.exe delete KillFuckDPI >nul 2>&1
+sc.exe stop WinDivert >nul 2>&1
+sc.exe delete WinDivert >nul 2>&1
+sc.exe stop WinDivert14 >nul 2>&1
+sc.exe delete WinDivert14 >nul 2>&1
+goto :eof
+
+:RUN_GUI
 call :CHECK_BINARIES
 cls
-echo [*] Установка автономной службы Windows...
-dpi_bypass.exe --uninstall >nul 2>&1
-dpi_bypass.exe --install
-echo.
-echo ===================================================================
-echo [УСПЕХ] Служба KILL F#CK DPI успешно установлена и запущена!
-echo ===================================================================
-echo  - YouTube (1080p/4K), Discord, заблокированные сайты работают.
-echo  - Сервера Xplay, FACEIT и CS2 работают на чистой скорости ядра.
-echo ===================================================================
-echo.
-pause
-goto MENU
+echo [*] Запуск KILL F#CK DPI в графическом режиме...
+start "" "dpi_bypass.exe" --gui
+echo [OK] Приложение запущено. Значок доступен в системном трее Windows.
+timeout /t 2 >nul
+exit /b
 
 :RUN_CONSOLE
 call :CHECK_BINARIES
 cls
-echo [*] Остановка фоновой службы перед запуском в консоли...
-dpi_bypass.exe --stop >nul 2>&1
 echo ===================================================================
 echo   Запуск в консольном окне. Для остановки нажмите Ctrl + C.
 echo ===================================================================
 echo.
-dpi_bypass.exe
+dpi_bypass.exe --console
+echo.
+echo [*] Выгрузка WinDivert из ядра Windows...
+call :CLEAN_SERVICES_SILENT
 pause
 goto MENU
 
-:REMOVE_SERVICE
+:FORCE_CLEAN
 cls
-echo [*] Остановка и удаление службы KILL F#CK DPI...
-dpi_bypass.exe --uninstall
-net stop WinDivert >nul 2>&1
+echo [*] Принудительная остановка и удаление сетевых хуков WinDivert...
+call :CLEAN_SERVICES_SILENT
 echo.
-echo [OK] Служба остановлена и удалена из системы.
+echo ===================================================================
+echo [УСПЕХ] Драйвер WinDivert полностью выгружен из ядра Windows!
+echo Сетевой стек работает в чистом штатном режиме.
+echo Никакие фоновые службы при перезагрузке ПК стартовать не будут.
+echo ===================================================================
 echo.
 pause
 goto MENU
@@ -122,3 +130,7 @@ if exist "verify.ps1" (
 )
 pause
 goto MENU
+
+:EXIT_APP
+call :CLEAN_SERVICES_SILENT
+exit /b

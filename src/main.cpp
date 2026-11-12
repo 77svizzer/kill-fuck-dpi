@@ -31,6 +31,13 @@ static std::thread g_worker_thread;
 static std::atomic<uint64_t> g_stat_tls(0);
 static std::atomic<uint64_t> g_stat_quic(0);
 
+void stop_divert();
+
+static LONG WINAPI CrashHandler(EXCEPTION_POINTERS*) {
+    stop_divert();
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
 void stop_divert() {
     g_running = false;
     if (g_divert_handle != INVALID_HANDLE_VALUE) {
@@ -41,6 +48,9 @@ void stop_divert() {
     if (g_worker_thread.joinable() && std::this_thread::get_id() != g_worker_thread.get_id()) {
         g_worker_thread.join();
     }
+    // Полная выгрузка драйвера WinDivert из ядра Windows,
+    // чтобы интернет никогда не ломался при закрытии или перезагрузке
+    kfdpi::ServiceController::ForceUnloadWinDivertKernelDriver();
 }
 
 bool is_divert_running() {
@@ -157,6 +167,9 @@ int main(int argc, char* argv[]) {
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
 
+    SetUnhandledExceptionFilter(CrashHandler);
+    atexit(stop_divert);
+
     char exe_path[MAX_PATH];
     if (GetModuleFileNameA(NULL, exe_path, MAX_PATH)) {
         char* last_slash = strrchr(exe_path, '\\');
@@ -165,6 +178,9 @@ int main(int argc, char* argv[]) {
             SetCurrentDirectoryA(exe_path);
         }
     }
+
+    // Предварительная очистка любых зависших драйверов от прошлых запусков
+    kfdpi::ServiceController::ForceUnloadWinDivertKernelDriver();
 
     kfdpi::ConfigManager::Instance().Load("config.ini");
 
@@ -243,7 +259,11 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    // По умолчанию запускаем графический интерфейс с треем
+    // По умолчанию скрываем черное консольное окно и запускаем аккуратный GUI с треем
+    HWND hConsole = GetConsoleWindow();
+    if (hConsole) {
+        ShowWindow(hConsole, SW_HIDE);
+    }
     HINSTANCE hInst = GetModuleHandle(NULL);
     return kfdpi::GuiManager::Instance().Run(hInst, SW_NORMAL);
 }

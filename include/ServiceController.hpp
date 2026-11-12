@@ -15,6 +15,7 @@ public:
     static bool Uninstall(const std::string& name);
     static bool Start(const std::string& name);
     static bool Stop(const std::string& name);
+    static void ForceUnloadWinDivertKernelDriver();
 
     static int RunAsService(const std::string& name, std::function<void()> worker_func, std::function<void()> stop_func);
 };
