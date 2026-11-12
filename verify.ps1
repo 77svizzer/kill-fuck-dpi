@@ -8,7 +8,8 @@ $targets = @(
     @{ Name = "Google Video CDN"; Url = "https://redirector.googlevideo.com" },
     @{ Name = "Discord API"; Url = "https://discord.com/api/v9" },
     @{ Name = "Discord Gateway"; Url = "https://gateway.discord.gg" },
-    @{ Name = "Заблокированные сайты (Rutracker)"; Url = "https://rutracker.org" }
+    @{ Name = "Заблокированные сайты (Rutracker)"; Url = "https://rutracker.org" },
+    @{ Name = "Xplay.gg Платформа"; Url = "https://xplay.gg" }
 )
 
 foreach ($t in $targets) {

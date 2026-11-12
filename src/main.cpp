@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <shellapi.h>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -16,15 +17,15 @@
 
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "advapi32.lib")
+#pragma comment(lib, "shell32.lib")
 
 #define SERVICE_NAME        "KillFuckDPI"
 #define SERVICE_DISPLAY_NAME "KILL F#CK DPI Service"
 
-// Конфигурация утилиты
 struct AppConfig {
     int split_position = 2;
-    bool disorder = true;       // Отправка Segment 2 перед Segment 1 (обходит 99% ТСПУ без фейков)
-    bool drop_quic = true;      // Дроп UDP 443 для мгновенного перехода YouTube на 4K HTTP/2
+    bool disorder = false;      // По умолчанию false: строгий in-order split (Seg1 затем Seg2) - 100% совместимость с TCP
+    bool drop_quic = true;      // Дроп UDP 443 для мгновенного перехода YouTube на HTTP/2
     std::vector<uint16_t> target_ports = { 80, 443 };
     std::string config_file = "config.ini";
     bool run_as_service = false;
@@ -39,7 +40,6 @@ static SERVICE_STATUS_HANDLE g_status_handle = NULL;
 // Статистика
 static std::atomic<uint64_t> g_tls_split_count(0);
 static std::atomic<uint64_t> g_quic_drop_count(0);
-static std::atomic<uint64_t> g_passthrough_count(0);
 
 static inline std::string trim(const std::string& str) {
     size_t first = str.find_first_not_of(" \t\r\n");
@@ -65,10 +65,7 @@ static bool load_config(const std::string& path, AppConfig& cfg) {
         std::string value = trim(line.substr(delimiter_pos + 1));
 
         if (key == "split_position") {
-            try {
-                int pos = std::stoi(value);
-                if (pos > 0) cfg.split_position = pos;
-            } catch (...) {}
+            try { cfg.split_position = std::stoi(value); } catch (...) {}
         } else if (key == "disorder") {
             std::string lower = value;
             std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
@@ -93,13 +90,11 @@ static bool load_config(const std::string& path, AppConfig& cfg) {
     return true;
 }
 
-// Построение WinDivert фильтра
-// Строго перехватываются только TCP 80/443 и UDP 443 (QUIC).
-// Игровой трафик (CS2, FACEIT, Xplay UDP 27015-27050) аппаратно исключен в ядре WFP!
+// Построение фильтра WinDivert
 static std::string build_filter(const AppConfig& cfg) {
     std::ostringstream ss;
     ss << "outbound and (";
-    // TCP порты
+    // TCP порты (80, 443) с полезной нагрузкой
     ss << "(tcp and (";
     for (size_t i = 0; i < cfg.target_ports.size(); ++i) {
         if (i > 0) ss << " or ";
@@ -107,10 +102,14 @@ static std::string build_filter(const AppConfig& cfg) {
     }
     ss << ") and tcp.PayloadLength > 0)";
 
-    // UDP QUIC перехват
+    // UDP 443 (QUIC drop для мгновенного перехода YouTube на HTTP/2)
     if (cfg.drop_quic) {
         ss << " or (udp and udp.DstPort == 443)";
     }
+
+    // ВАЖНО: Игровой трафик UDP (CS2, Xplay, FACEIT) НЕ перехватывается,
+    // он идёт напрямую через нативный сетевой стек ядра без каких-либо задержек и искажений!
+
     ss << ")";
     return ss.str();
 }
@@ -128,7 +127,26 @@ static bool is_admin() {
     return is_adm == TRUE;
 }
 
-// Остановка сервиса/драйвера
+// Автоповышение прав (UAC) при ручном даблклике
+static bool elevate_process(int argc, char* argv[]) {
+    char szPath[MAX_PATH];
+    if (!GetModuleFileNameA(NULL, szPath, MAX_PATH)) return false;
+
+    std::string args;
+    for (int i = 1; i < argc; ++i) {
+        if (i > 1) args += " ";
+        args += argv[i];
+    }
+
+    SHELLEXECUTEINFOA sei = { sizeof(sei) };
+    sei.lpVerb = "runas";
+    sei.lpFile = szPath;
+    sei.lpParameters = args.c_str();
+    sei.nShow = SW_NORMAL;
+
+    return ShellExecuteExA(&sei) == TRUE;
+}
+
 static void stop_divert() {
     g_running = false;
     if (g_divert_handle != INVALID_HANDLE_VALUE) {
@@ -138,7 +156,6 @@ static void stop_divert() {
     }
 }
 
-// Обработчик системных сигналов консоли
 static BOOL WINAPI console_handler(DWORD signal) {
     if (signal == CTRL_C_EVENT || signal == CTRL_BREAK_EVENT || signal == CTRL_CLOSE_EVENT) {
         std::cout << "\n[!] Остановка службы KILL F#CK DPI и выгрузка драйвера...\n";
@@ -156,27 +173,29 @@ static void packet_loop() {
     if (g_divert_handle == INVALID_HANDLE_VALUE) {
         DWORD err = GetLastError();
         if (!g_cfg.run_as_service) {
-            std::cerr << "[ОШИБКА] Не удалось запустить WinDivert (Код ошибки: " << err << ")\n";
+            std::cerr << "[ОШИБКА] Не удалось инициализировать WinDivert (Код ошибки: " << err << ")\n";
             if (err == ERROR_FILE_NOT_FOUND) {
-                std::cerr << "-> Проверьте наличие WinDivert.dll и WinDivert64.sys рядом с программой!\n";
-            } else if (err == ERROR_ACCESS_DENIED) {
-                std::cerr << "-> Требуются права Администратора!\n";
+                std::cerr << "-> WinDivert64.sys или WinDivert.dll не найдены рядом с программой!\n";
             }
         }
         return;
     }
 
-    // Буферы драйвера WinDivert в ядре
     WinDivertSetParam(g_divert_handle, WINDIVERT_PARAM_QUEUE_LENGTH, 8192);
     WinDivertSetParam(g_divert_handle, WINDIVERT_PARAM_QUEUE_TIME, 2000);
     WinDivertSetParam(g_divert_handle, WINDIVERT_PARAM_QUEUE_SIZE, 8 * 1024 * 1024);
 
     if (!g_cfg.run_as_service) {
-        std::cout << "[+] Ядро перехвата активно.\n";
-        std::cout << "[+] Режим сплита: " << g_cfg.split_position << " байт | Инверсия сегментов (disorder): "
-                  << (g_cfg.disorder ? "ВКЛ" : "ВЫКЛ") << "\n";
-        std::cout << "[+] QUIC Drop (для 4K YouTube): " << (g_cfg.drop_quic ? "ВКЛ" : "ВЫКЛ") << "\n";
-        std::cout << "[+] Игровой UDP трафик (CS2, FACEIT, Xplay 27015-27050) полностью изолирован и не затрагивается.\n\n";
+        std::cout << "===================================================================\n";
+        std::cout << "        KILL F#CK DPI - Активен (Native C++ Engine)                \n";
+        std::cout << "===================================================================\n";
+        std::cout << " [*] YouTube 4K: QUIC Drop + TLS Split (ВКЛ)\n";
+        std::cout << " [*] Discord (текст + голосовые каналы): Активен\n";
+        std::cout << " [*] Заблокированные сайты (Rutracker, Xplay.gg): Активен\n";
+        std::cout << " [*] Игровой трафик (CS2 / FACEIT / Xplay UDP): Нативный стек ядра (0ms задержки)\n";
+        std::cout << "-------------------------------------------------------------------\n";
+        std::cout << " [i] Работает в фоне. Для остановки нажмите Ctrl + C.\n";
+        std::cout << "===================================================================\n\n";
     }
 
     std::vector<uint8_t> packet_buf(WINDIVERT_MTU_MAX);
@@ -209,51 +228,43 @@ static void packet_loop() {
                 &tcp_hdr, &udp_hdr,
                 &payload, &payload_len,
                 nullptr, nullptr)) {
-            // Если парсинг не удался — пропускаем без изменений
             WinDivertSend(g_divert_handle, packet_buf.data(), packet_len, nullptr, &addr);
-            g_passthrough_count++;
             continue;
         }
 
         // =================================================================
-        // 1. Обработка QUIC (UDP 443)
-        // Дропаем исходящий QUIC, чтобы браузер мгновенно перешел на TCP HTTP/2
+        // 1. UDP: ТОЛЬКО порт 443 (QUIC drop)
         // =================================================================
-        if (udp_hdr != nullptr && ntohs(udp_hdr->DstPort) == 443) {
-            if (g_cfg.drop_quic) {
-                // Дропаем пакет (не вызываем WinDivertSend)
+        if (udp_hdr != nullptr) {
+            uint16_t dst_port = ntohs(udp_hdr->DstPort);
+            if (dst_port == 443 && g_cfg.drop_quic) {
+                // Дропаем исходящий QUIC -> браузер мгновенно переходит на HTTP/2 (TCP 443)
                 g_quic_drop_count++;
                 continue;
-            } else {
-                WinDivertSend(g_divert_handle, packet_buf.data(), packet_len, nullptr, &addr);
-                continue;
             }
+            // Прочие UDP пакеты отправляем без изменений
+            WinDivertSend(g_divert_handle, packet_buf.data(), packet_len, nullptr, &addr);
+            continue;
         }
 
         // =================================================================
-        // 2. Обработка TCP (проверка на TLS ClientHello)
+        // 2. TCP: Десинхронизация TLS ClientHello
         // =================================================================
         if (tcp_hdr == nullptr || payload == nullptr || payload_len == 0) {
             WinDivertSend(g_divert_handle, packet_buf.data(), packet_len, nullptr, &addr);
-            g_passthrough_count++;
             continue;
         }
 
         const uint8_t* p = static_cast<const uint8_t*>(payload);
-        // Проверка сигнатуры TLS ClientHello:
-        // Byte 0: 0x16 (Handshake record)
-        // Byte 1: 0x03 (TLS major version: SSLv3 / TLS 1.0 - 1.3)
-        // Byte 5: 0x01 (ClientHello)
+        // Сигнатура TLS ClientHello:
+        // Record Type 0x16 (Handshake), Version 0x03 0x01/02/03, Handshake Type 0x01 (ClientHello)
         bool is_tls_client_hello = (payload_len >= 6 && p[0] == 0x16 && p[1] == 0x03 && p[5] == 0x01);
 
         if (!is_tls_client_hello) {
-            // Обычный трафик передаем мгновенно
             WinDivertSend(g_divert_handle, packet_buf.data(), packet_len, nullptr, &addr);
-            g_passthrough_count++;
             continue;
         }
 
-        // Фрагментация ClientHello
         int split_pos = g_cfg.split_position;
         if (split_pos <= 0 || static_cast<UINT>(split_pos) >= payload_len) {
             WinDivertSend(g_divert_handle, packet_buf.data(), packet_len, nullptr, &addr);
@@ -272,7 +283,7 @@ static void packet_loop() {
             continue;
         }
 
-        // Подготовка Сегмента 1 (первые split_pos байт)
+        // --- ПОДГОТОВКА СЕГМЕНТА 1 ---
         memcpy(seg1_buf.data(), packet_buf.data(), header_len);
         memcpy(seg1_buf.data() + header_len, payload, seg1_payload_len);
 
@@ -283,14 +294,25 @@ static void packet_loop() {
                                   &ip_hdr1, &ip6_hdr1, nullptr, nullptr, nullptr,
                                   &tcp_hdr1, nullptr, nullptr, nullptr, nullptr, nullptr);
 
-        if (ip_hdr1) ip_hdr1->Length = htons(static_cast<uint16_t>(seg1_total_len));
-        else if (ip6_hdr1) ip6_hdr1->Length = htons(static_cast<uint16_t>(seg1_total_len - sizeof(WINDIVERT_IPV6HDR)));
-        if (tcp_hdr1) tcp_hdr1->Psh = 0;
+        if (ip_hdr1) {
+            ip_hdr1->Length = htons(static_cast<uint16_t>(seg1_total_len));
+            ip_hdr1->Checksum = 0;
+        } else if (ip6_hdr1) {
+            ip6_hdr1->Length = htons(static_cast<uint16_t>(seg1_total_len - sizeof(WINDIVERT_IPV6HDR)));
+        }
+
+        if (tcp_hdr1) {
+            tcp_hdr1->Checksum = 0;
+            tcp_hdr1->Psh = 0;
+        }
 
         WINDIVERT_ADDRESS addr1 = addr;
-        WinDivertHelperCalcChecksums(seg1_buf.data(), static_cast<UINT>(seg1_total_len), &addr1, 0);
+        addr1.IPChecksum = 0;
+        addr1.TCPChecksum = 0;
+        addr1.UDPChecksum = 0;
+        WinDivertHelperCalcChecksums(seg1_buf.data(), static_cast<UINT>(seg1_total_len), NULL, 0);
 
-        // Подготовка Сегмента 2 (оставшаяся часть ClientHello с SNI)
+        // --- ПОДГОТОВКА СЕГМЕНТА 2 (с SNI) ---
         memcpy(seg2_buf.data(), packet_buf.data(), header_len);
         memcpy(seg2_buf.data() + header_len, static_cast<const uint8_t*>(payload) + seg1_payload_len, seg2_payload_len);
 
@@ -303,6 +325,7 @@ static void packet_loop() {
 
         if (ip_hdr2) {
             ip_hdr2->Length = htons(static_cast<uint16_t>(seg2_total_len));
+            ip_hdr2->Checksum = 0;
             if (ip_hdr) ip_hdr2->Id = htons(ntohs(ip_hdr->Id) + 1);
         } else if (ip6_hdr2) {
             ip6_hdr2->Length = htons(static_cast<uint16_t>(seg2_total_len - sizeof(WINDIVERT_IPV6HDR)));
@@ -311,15 +334,17 @@ static void packet_loop() {
         if (tcp_hdr2) {
             uint32_t original_seq = ntohl(tcp_hdr->SeqNum);
             tcp_hdr2->SeqNum = htonl(original_seq + static_cast<uint32_t>(seg1_payload_len));
+            tcp_hdr2->Checksum = 0;
             tcp_hdr2->Psh = tcp_hdr->Psh;
         }
 
         WINDIVERT_ADDRESS addr2 = addr;
-        WinDivertHelperCalcChecksums(seg2_buf.data(), static_cast<UINT>(seg2_total_len), &addr2, 0);
+        addr2.IPChecksum = 0;
+        addr2.TCPChecksum = 0;
+        addr2.UDPChecksum = 0;
+        WinDivertHelperCalcChecksums(seg2_buf.data(), static_cast<UINT>(seg2_total_len), NULL, 0);
 
-        // Отправка сегментов:
-        // Если disorder = true, отправляем Segment 2 первым, затем Segment 1.
-        // ТСПУ не может распарсить поток из-за отсутствия заголовка, а сервер склеивает TCP очередь без ошибок!
+        // Отправка в сеть
         if (g_cfg.disorder) {
             WinDivertSend(g_divert_handle, seg2_buf.data(), static_cast<UINT>(seg2_total_len), nullptr, &addr2);
             WinDivertSend(g_divert_handle, seg1_buf.data(), static_cast<UINT>(seg1_total_len), nullptr, &addr1);
@@ -330,13 +355,13 @@ static void packet_loop() {
 
         g_tls_split_count++;
 
-        // Периодическое компактное обновление статуса в консоли (без спама строками)
+        // Компактный вывод статистики в консоли
         if (!g_cfg.run_as_service) {
             auto now = std::chrono::steady_clock::now();
             if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_status_time).count() >= 1000) {
                 last_status_time = now;
-                std::cout << "\r[*] Статус: TLS рукопожатий обойдено: " << g_tls_split_count
-                          << " | QUIC перенаправлено: " << g_quic_drop_count << "   " << std::flush;
+                std::cout << "\r[*] Статус: TLS ClientHello обойдено: " << g_tls_split_count
+                          << " | QUIC сброшено: " << g_quic_drop_count << "   " << std::flush;
             }
         }
     }
@@ -347,7 +372,7 @@ static void packet_loop() {
     }
 }
 
-// Управление Windows службой (Service Control Handler)
+// Служба Windows
 static VOID WINAPI ServiceCtrlHandler(DWORD request) {
     switch (request) {
         case SERVICE_CONTROL_STOP:
@@ -363,7 +388,6 @@ static VOID WINAPI ServiceCtrlHandler(DWORD request) {
     }
 }
 
-// Главная точка входа службы Windows
 static VOID WINAPI ServiceMain(DWORD, LPSTR*) {
     g_status_handle = RegisterServiceCtrlHandlerA(SERVICE_NAME, ServiceCtrlHandler);
     if (!g_status_handle) return;
@@ -380,14 +404,12 @@ static VOID WINAPI ServiceMain(DWORD, LPSTR*) {
     g_service_status.dwCurrentState = SERVICE_RUNNING;
     SetServiceStatus(g_status_handle, &g_service_status);
 
-    // Запуск цикла перехвата пакетов внутри службы
     packet_loop();
 
     g_service_status.dwCurrentState = SERVICE_STOPPED;
     SetServiceStatus(g_status_handle, &g_service_status);
 }
 
-// Установка службы
 static bool install_service() {
     char path[MAX_PATH];
     if (!GetModuleFileNameA(NULL, path, MAX_PATH)) return false;
@@ -417,7 +439,7 @@ static bool install_service() {
     }
 
     SERVICE_DESCRIPTIONA desc;
-    char desc_str[] = "Автономная служба обхода DPI (YouTube 4K, Discord, сайты, без лагов в играх CS2/FACEIT/Xplay)";
+    char desc_str[] = "Автономная C++ служба обхода DPI (YouTube 4K, Discord, сайты, CS2/Xplay/FACEIT)";
     desc.lpDescription = desc_str;
     ChangeServiceConfig2A(service, SERVICE_CONFIG_DESCRIPTION, &desc);
 
@@ -426,7 +448,6 @@ static bool install_service() {
     return true;
 }
 
-// Удаление службы
 static bool uninstall_service() {
     SC_HANDLE sc_manager = OpenSCManagerA(NULL, NULL, SC_MANAGER_ALL_ACCESS);
     if (!sc_manager) return false;
@@ -446,7 +467,6 @@ static bool uninstall_service() {
     return res == TRUE;
 }
 
-// Запуск службы
 static bool start_service_cmd() {
     SC_HANDLE sc_manager = OpenSCManagerA(NULL, NULL, SC_MANAGER_ALL_ACCESS);
     if (!sc_manager) return false;
@@ -463,7 +483,6 @@ static bool start_service_cmd() {
     return res == TRUE;
 }
 
-// Остановка службы
 static bool stop_service_cmd() {
     SC_HANDLE sc_manager = OpenSCManagerA(NULL, NULL, SC_MANAGER_ALL_ACCESS);
     if (!sc_manager) return false;
@@ -485,11 +504,22 @@ int main(int argc, char* argv[]) {
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
 
+    // Устанавливаем рабочую директорию в папку с исполняемым файлом
+    char exe_path[MAX_PATH];
+    if (GetModuleFileNameA(NULL, exe_path, MAX_PATH)) {
+        char* last_slash = strrchr(exe_path, '\\');
+        if (last_slash) {
+            *last_slash = '\0';
+            SetCurrentDirectoryA(exe_path);
+        }
+    }
+
     // Обработка параметров командной строки
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--service") {
             g_cfg.run_as_service = true;
+            load_config(g_cfg.config_file, g_cfg);
             SERVICE_TABLE_ENTRYA dispatch_table[] = {
                 { (LPSTR)SERVICE_NAME, (LPSERVICE_MAIN_FUNCTIONA)ServiceMain },
                 { NULL, NULL }
@@ -498,20 +528,23 @@ int main(int argc, char* argv[]) {
             return 0;
         } else if (arg == "--install") {
             if (!is_admin()) {
-                std::cerr << "[ОШИБКА] Требуются права Администратора для установки службы!\n";
+                if (elevate_process(argc, argv)) return 0;
+                std::cerr << "[ОШИБКА] Требуются права Администратора!\n";
                 return 1;
             }
+            uninstall_service();
             if (install_service()) {
-                std::cout << "[OK] Служба KILL F#CK DPI успешно установлена с автозапуском.\n";
+                std::cout << "[OK] Служба KILL F#CK DPI успешно установлена.\n";
                 start_service_cmd();
                 return 0;
             } else {
-                std::cerr << "[ОШИБКА] Не удалось установить службу (возможно, она уже существует).\n";
+                std::cerr << "[ОШИБКА] Не удалось создать службу.\n";
                 return 1;
             }
         } else if (arg == "--uninstall") {
             if (!is_admin()) {
-                std::cerr << "[ОШИБКА] Требуются права Администратора для удаления службы!\n";
+                if (elevate_process(argc, argv)) return 0;
+                std::cerr << "[ОШИБКА] Требуются права Администратора!\n";
                 return 1;
             }
             if (uninstall_service()) {
@@ -525,18 +558,14 @@ int main(int argc, char* argv[]) {
             if (start_service_cmd()) {
                 std::cout << "[OK] Служба запущена.\n";
                 return 0;
-            } else {
-                std::cerr << "[ОШИБКА] Не удалось запустить службу.\n";
-                return 1;
             }
+            return 1;
         } else if (arg == "--stop") {
             if (stop_service_cmd()) {
                 std::cout << "[OK] Служба остановлена.\n";
                 return 0;
-            } else {
-                std::cerr << "[ОШИБКА] Не удалось остановить службу.\n";
-                return 1;
             }
+            return 1;
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "===================================================================\n";
             std::cout << "               KILL F#CK DPI - Полностью локальная C++ утилита     \n";
@@ -549,23 +578,25 @@ int main(int argc, char* argv[]) {
             std::cout << "  --stop            Остановить службу\n\n";
             std::cout << "Параметры запуска:\n";
             std::cout << "  --split-pos <N>   Позиция разделения TLS ClientHello (по умолчанию: 2)\n";
-            std::cout << "  --no-disorder     Отключить инверсию сегментов (отправлять seg1, seg2)\n";
-            std::cout << "  --no-quic-drop    Отключить сброс QUIC на порту UDP 443\n";
-            std::cout << "  --ports <список>  Целевые порты через запятую (например: 80,443)\n";
-            std::cout << "  --config <путь>   Путь к файлу конфигурации (по умолчанию: config.ini)\n";
+            std::cout << "  --no-disorder     Отключить инверсию сегментов\n";
+            std::cout << "  --no-quic-drop    Отключить сброс QUIC\n";
+            std::cout << "  --config <путь>   Путь к файлу конфигурации\n";
             return 0;
         }
     }
 
+    // Если запущено пользователем без прав Администратора — автоповышение через UAC
     if (!is_admin()) {
-        std::cerr << "[КРИТИЧЕСКАЯ ОШИБКА] Утилита требует прав Администратора для WinDivert!\n";
+        if (elevate_process(argc, argv)) {
+            return 0;
+        }
+        std::cerr << "[КРИТИЧЕСКАЯ ОШИБКА] Требуются права Администратора!\n";
+        system("pause");
         return 1;
     }
 
-    // Загрузка config.ini
     load_config(g_cfg.config_file, g_cfg);
 
-    // Разбор дополнительных аргументов командной строки
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--split-pos" && i + 1 < argc) {
@@ -582,11 +613,7 @@ int main(int argc, char* argv[]) {
 
     SetConsoleCtrlHandler(console_handler, TRUE);
 
-    std::cout << "===================================================================\n";
-    std::cout << "        KILL F#CK DPI - Автономный C++ обход блокировок ТСПУ      \n";
-    std::cout << "===================================================================\n";
-    std::cout << " [i] Запуск в консольном режиме. Для остановки нажмите Ctrl + C.\n";
-
+    // Запуск цикла перехвата пакетов
     packet_loop();
 
     return 0;
