@@ -6,34 +6,45 @@
 #include <atomic>
 #include <vector>
 #include <chrono>
+#include <thread>
 
 #include "windivert.h"
 #include "ConfigManager.hpp"
 #include "ProtocolParser.hpp"
 #include "DesyncEngine.hpp"
 #include "ServiceController.hpp"
+#include "GuiManager.hpp"
 
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "shell32.lib")
+#pragma comment(lib, "comctl32.lib")
 
 #define SERVICE_NAME         "KillFuckDPI"
 #define SERVICE_DISPLAY_NAME "KILL F#CK DPI Service"
 
-static std::atomic<bool> g_running(true);
+static std::atomic<bool> g_running(false);
 static HANDLE g_divert_handle = INVALID_HANDLE_VALUE;
+static std::thread g_worker_thread;
 
 // Статистика
 static std::atomic<uint64_t> g_stat_tls(0);
 static std::atomic<uint64_t> g_stat_quic(0);
 
-static void stop_divert() {
+void stop_divert() {
     g_running = false;
     if (g_divert_handle != INVALID_HANDLE_VALUE) {
         WinDivertShutdown(g_divert_handle, WINDIVERT_SHUTDOWN_BOTH);
         WinDivertClose(g_divert_handle);
         g_divert_handle = INVALID_HANDLE_VALUE;
     }
+    if (g_worker_thread.joinable() && std::this_thread::get_id() != g_worker_thread.get_id()) {
+        g_worker_thread.join();
+    }
+}
+
+bool is_divert_running() {
+    return g_running.load() && (g_divert_handle != INVALID_HANDLE_VALUE);
 }
 
 static BOOL WINAPI console_handler(DWORD signal) {
@@ -46,11 +57,13 @@ static BOOL WINAPI console_handler(DWORD signal) {
 }
 
 static void packet_loop(bool is_service) {
+    g_running = true;
     const auto& cfg = kfdpi::ConfigManager::Instance().Get();
     std::string filter = kfdpi::ConfigManager::Instance().BuildFilter();
 
     g_divert_handle = WinDivertOpen(filter.c_str(), WINDIVERT_LAYER_NETWORK, 0, 0);
     if (g_divert_handle == INVALID_HANDLE_VALUE) {
+        g_running = false;
         if (!is_service) {
             DWORD err = GetLastError();
             std::cerr << "[ОШИБКА] Не удалось инициализировать WinDivert (Код: " << err << ")\n";
@@ -61,7 +74,6 @@ static void packet_loop(bool is_service) {
         return;
     }
 
-    // Тюнинг очередей драйвера для нулевых потерь и устойчивости
     WinDivertSetParam(g_divert_handle, WINDIVERT_PARAM_QUEUE_LENGTH, 8192);
     WinDivertSetParam(g_divert_handle, WINDIVERT_PARAM_QUEUE_TIME, 2000);
     WinDivertSetParam(g_divert_handle, WINDIVERT_PARAM_QUEUE_SIZE, 16 * 1024 * 1024);
@@ -109,7 +121,6 @@ static void packet_loop(bool is_service) {
         bool send_allowed = engine.Process(packet_buf.data(), packet_len, addr, parsed, fragments);
 
         if (!send_allowed) {
-            // Пакет дропнут (например, QUIC)
             g_stat_quic++;
             continue;
         }
@@ -118,7 +129,6 @@ static void packet_loop(bool is_service) {
             g_stat_tls++;
         }
 
-        // Отправка фрагментов
         for (const auto& frag : fragments) {
             WinDivertSend(g_divert_handle, frag.buffer.data(), static_cast<UINT>(frag.buffer.size()), nullptr, &frag.address);
         }
@@ -136,11 +146,17 @@ static void packet_loop(bool is_service) {
     stop_divert();
 }
 
+void start_divert_worker() {
+    stop_divert();
+    g_worker_thread = std::thread([]() {
+        packet_loop(true);
+    });
+}
+
 int main(int argc, char* argv[]) {
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
 
-    // Устанавливаем рабочую директорию в папку с исполняемым файлом
     char exe_path[MAX_PATH];
     if (GetModuleFileNameA(NULL, exe_path, MAX_PATH)) {
         char* last_slash = strrchr(exe_path, '\\');
@@ -152,6 +168,9 @@ int main(int argc, char* argv[]) {
 
     kfdpi::ConfigManager::Instance().Load("config.ini");
 
+    bool force_console = false;
+    bool force_gui = false;
+
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--service") {
@@ -160,6 +179,10 @@ int main(int argc, char* argv[]) {
             }, []() {
                 stop_divert();
             });
+        } else if (arg == "--console") {
+            force_console = true;
+        } else if (arg == "--gui") {
+            force_gui = true;
         } else if (arg == "--install") {
             if (!kfdpi::ServiceController::IsAdmin()) {
                 if (kfdpi::ServiceController::Elevate(argc, argv)) return 0;
@@ -194,7 +217,9 @@ int main(int argc, char* argv[]) {
             return kfdpi::ServiceController::Stop(SERVICE_NAME) ? 0 : 1;
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "KILL F#CK DPI - Модульная C++ утилита обхода ТСПУ\n\n";
-            std::cout << "Команды управления службой:\n";
+            std::cout << "Опции запуска:\n";
+            std::cout << "  --gui             Запуск графической панели управления (по умолчанию при даблклике)\n";
+            std::cout << "  --console         Запуск в интерактивном окне консоли\n";
             std::cout << "  --install         Установить службу с автозапуском\n";
             std::cout << "  --uninstall       Остановить и удалить службу\n";
             std::cout << "  --start           Запустить службу\n";
@@ -212,7 +237,13 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    SetConsoleCtrlHandler(console_handler, TRUE);
-    packet_loop(false);
-    return 0;
+    if (force_console) {
+        SetConsoleCtrlHandler(console_handler, TRUE);
+        packet_loop(false);
+        return 0;
+    }
+
+    // По умолчанию запускаем графический интерфейс с треем
+    HINSTANCE hInst = GetModuleHandle(NULL);
+    return kfdpi::GuiManager::Instance().Run(hInst, SW_NORMAL);
 }
