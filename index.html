@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KILL F#CK DPI — Модульный C++ обход ТСПУ</title>
+  <meta name="description" content="Автономная утилита обхода DPI на чистом C++17. Воспроизведение YouTube 4K, связь Discord и аппаратный 0ms пропуск CS2 и Xplay без winws и zapret.">
+  <link rel="preconnect" href="https://api.fontshare.com">
+  <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
+  <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+  <!-- Навигация -->
+  <header class="site-header">
+    <div class="container header-inner">
+      <a href="#" class="brand">KILL F#CK DPI</a>
+      <nav class="nav-links">
+        <a href="#features" class="nav-link">Возможности</a>
+        <a href="#simulator" class="nav-link">Симулятор</a>
+        <a href="#architecture" class="nav-link">Архитектура</a>
+        <a href="#stats" class="nav-link">Показатели</a>
+        <a href="#faq" class="nav-link">Вопросы</a>
+      </nav>
+      <a href="#download" class="nav-cta">Скачать v1.4</a>
+    </div>
+  </header>
+
+  <main>
+    <!-- Главный экран -->
+    <section class="section hero">
+      <div class="container hero-grid">
+        <div class="hero-content" data-reveal>
+          <h1 class="hero-title">Обход DPI на чистом C++</h1>
+          <p class="hero-lead">Автономное модульное ядро без winws и zapret. Воспроизведение YouTube 4K, связь Discord и аппаратный пропуск игровых пакетов CS2 и Xplay с нулевой задержкой.</p>
+          <div class="hero-actions">
+            <a href="#download" class="btn-primary">Скачать сборку</a>
+            <a href="#simulator" class="btn-secondary">Попробовать симулятор</a>
+          </div>
+        </div>
+
+        <!-- Фрагмент интерфейса 1: Интерактивный симулятор пакетов -->
+        <div class="simulator-box" id="simulator" data-ui data-reveal>
+          <div class="simulator-header">
+            <span class="simulator-title">Сетевой инспектор пакетов ядра</span>
+            <span class="simulator-badge">WinDivert NDIS Filter</span>
+          </div>
+
+          <div class="tab-selector">
+            <button type="button" class="tab-btn active" data-target="youtube">YouTube 4K</button>
+            <button type="button" class="tab-btn" data-target="cs2">CS2 / Xplay (27015)</button>
+            <button type="button" class="tab-btn" data-target="discord">Discord Voice</button>
+            <button type="button" class="tab-btn" data-target="blocked">Rutracker</button>
+          </div>
+
+          <div class="packet-display">
+            <pre><code id="packet-code">[OUTBOUND TCP:443] TLS 1.3 ClientHello (512 bytes)
+ -> Десинхронизация: Split at offset 2 + Disorder
+ -> Fragment 1: TCP Seq 1..2 (2 bytes)
+ -> Fragment 2: TCP Seq 3..512 (510 bytes, SNI: googlevideo.com)
+ -> Статус инъекции: Пакеты доставлены с перерасчетом RFC 793 Checksum
+[OUTBOUND UDP:443] QUIC Packet Detected
+ -> Принудительный сброс: Браузер переведен на HTTP/2 (4K 60fps доступен)</code></pre>
+          </div>
+
+          <div class="simulator-metrics">
+            <div class="metric-card">
+              <div class="metric-val" id="metric-ping">14 ms</div>
+              <div class="metric-lbl">Задержка сети</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-val" id="metric-loss">0%</div>
+              <div class="metric-lbl">Потеря пакетов</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-val" id="metric-action">TLS Split + QUIC</div>
+              <div class="metric-lbl">Режим обработки</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Основные возможности -->
+    <section class="section section-surface" id="features">
+      <div class="container">
+        <div class="section-head" data-reveal>
+          <h2 class="heading">Инженерная точность ядра</h2>
+          <p class="subheading">Каждый сетевой протокол обрабатывается специализированным алгоритмом без сторонних зависимостей.</p>
+        </div>
+
+        <div class="features-split">
+          <!-- Фрагмент интерфейса 2: Нативное окно управления Win32 GUI -->
+          <div class="gui-preview-box" data-ui data-reveal>
+            <div class="gui-header">
+              <span class="gui-title">Панель управления Win32 Unicode</span>
+              <span class="simulator-badge">Системный трей</span>
+            </div>
+            <div class="gui-status-banner" id="gui-mock-status">
+              Статус: Обход АКТИВЕН (YouTube 4K, Discord, Сайты)
+            </div>
+            <button type="button" class="gui-btn-mock primary" id="gui-mock-toggle">
+              Остановить обход DPI
+            </button>
+            <button type="button" class="gui-btn-mock secondary">
+              Экстренный сброс драйвера сети
+            </button>
+            <button type="button" class="gui-btn-mock secondary">
+              Открыть настройки (config.ini)
+            </button>
+          </div>
+
+          <div class="feature-list" data-reveal>
+            <article class="feature-item">
+              <h3 class="feature-title">Аппаратный обход CS2</h3>
+              <p class="feature-desc">Диапазон UDP портов 27000–27100 исключен в NDIS-фильтре драйвера. Игровые пакеты идут напрямую через стек ядра Windows без задержек.</p>
+            </article>
+
+            <article class="feature-item">
+              <h3 class="feature-title">YouTube в разрешении 4K</h3>
+              <p class="feature-desc">Разрезание TLS ClientHello на два сегмента и сброс исходящего QUIC переключают плеер на быстрый поток HTTP/2 без буферизации.</p>
+            </article>
+
+            <article class="feature-item">
+              <h3 class="feature-title">Безопасность сетевого стека</h3>
+              <p class="feature-desc">Автозапуск при старте Windows полностью отключен. При закрытии программы драйвер WinDivert принудительно выгружается из ядра.</p>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Архитектура прохождения пакетов -->
+    <section class="section" id="architecture">
+      <div class="container">
+        <div class="section-head" data-reveal>
+          <h2 class="heading">Архитектура обработки трафика</h2>
+          <p class="subheading">Последовательный путь каждого сетевого пакета от сокета приложения до сетевой карты.</p>
+        </div>
+
+        <div class="architecture-split">
+          <div class="workflow-steps" data-reveal>
+            <div class="workflow-step">
+              <div class="step-label">Этап 1</div>
+              <h3 class="step-title">NDIS Перехват</h3>
+              <p class="step-text">Драйвер перехватывает только целевой исходящий трафик. Игровые порты пропускаются мгновенно.</p>
+            </div>
+
+            <div class="workflow-step">
+              <div class="step-label">Этап 2</div>
+              <h3 class="step-title">Zero-Copy Анализ</h3>
+              <p class="step-text">Парсер определяет L3 IPv4/IPv6, L4 TCP/UDP и выделяет заголовок TLS ClientHello без выделения памяти.</p>
+            </div>
+
+            <div class="workflow-step">
+              <div class="step-label">Этап 3</div>
+              <h3 class="step-title">Десинхронизация</h3>
+              <p class="step-text">Пакет разделяется на 2 байта и тело. Сегменты отправляются в инверсном порядке для сбивания ТСПУ.</p>
+            </div>
+
+            <div class="workflow-step">
+              <div class="step-label">Этап 4</div>
+              <h3 class="step-title">Инъекция в стек</h3>
+              <p class="step-text">Контрольные суммы пересчитываются с передачей адреса сетевой карты, исключая аппаратные коллизии NDIS.</p>
+            </div>
+          </div>
+
+          <!-- Фрагмент интерфейса 3: Консольный терминал логов пакетов -->
+          <div class="terminal-box" data-ui data-reveal>
+            <div class="terminal-header">
+              <span class="terminal-title">Консольный поток пакетов ядра</span>
+              <span class="simulator-badge">Zero-Copy L3/L4/L7</span>
+            </div>
+            <div class="terminal-screen">
+              <pre><code>[*] WinDivert v1.4 kernel handle initialized
+[*] NDIS BPF Filter: tcp.DstPort in {80, 443} or udp.DstPort == 443
+[*] Hardware Exclusion: !udp.DstPort in {27000..27100}
+[+] IPv4 TCP 192.168.1.102:51244 -> 142.250.74.78:443
+    TLS ClientHello detected (SNI: rr4---sn-4g5edn6z.googlevideo.com)
+    Applying Split Strategy: pos=2, disorder=true
+    Fragment 1 sent: len=2, seq=1001, csum=0x8a4f (OK)
+    Fragment 2 sent: len=510, seq=1003, csum=0x2e11 (OK)
+[+] UDP Port 27015: Valve Netcode bypass -> Direct WFP pass-through
+[*] Status: TLS desynced: 418 | QUIC dropped: 92 | Gaming drop: 0</code></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Технические показатели -->
+    <section class="section section-surface" id="stats">
+      <div class="container">
+        <div class="section-head" data-reveal>
+          <h2 class="heading">Аппаратные показатели</h2>
+          <p class="subheading">Реальные замеры производительности на стенде под управлением Windows 11.</p>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-item" data-reveal>
+            <div class="stat-number">0.00 ms</div>
+            <div class="stat-desc">Добавочная задержка в CS2 и Xplay</div>
+          </div>
+
+          <div class="stat-item" data-reveal>
+            <div class="stat-number">0%</div>
+            <div class="stat-desc">Потеря сетевых пакетов в матчах</div>
+          </div>
+
+          <div class="stat-item" data-reveal>
+            <div class="stat-number">328 КБ</div>
+            <div class="stat-desc">Размер полностью нативного бинарника</div>
+          </div>
+
+          <div class="stat-item" data-reveal>
+            <div class="stat-number">0 МБ</div>
+            <div class="stat-desc">Сторонних библиотек Cygwin или Python</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Ответы на вопросы и конфигурация -->
+    <section class="section" id="faq">
+      <div class="container">
+        <div class="section-head" data-reveal>
+          <h2 class="heading">Часто задаваемые вопросы</h2>
+          <p class="subheading">Технические разъяснения о работе утилиты и безопасности сетевого стека.</p>
+        </div>
+
+        <div class="architecture-split">
+          <div class="faq-list">
+            <div class="faq-item" data-reveal>
+              <h3 class="faq-question">Почему раньше пропадал интернет при включении ПК?</h3>
+              <p class="faq-answer">Ранее служба устанавливалась с автозапуском при старте системы. Если процесс завершался аварийно, фильтр драйвера ядра блокировал исходящий TCP-стек. В новой версии автозапуск полностью исключен, а драйвер принудительно выгружается из ядра при каждом закрытии.</p>
+            </div>
+
+            <div class="faq-item" data-reveal>
+              <h3 class="faq-question">Безопасно ли это для аккаунта Steam и античита FACEIT?</h3>
+              <p class="faq-answer">Да. Игровой диапазон портов 27000–27100 аппаратно исключен в правилах NDIS. Драйвер не перехватывает и не модифицирует игровые пакеты Source 2, передавая их напрямую через стек Windows.</p>
+            </div>
+
+            <div class="faq-item" data-reveal>
+              <h3 class="faq-question">Нужны ли права администратора для запуска?</h3>
+              <p class="faq-answer">Да. Сетевой драйвер WinDivert работает на уровне ядра Windows Filtering Platform (WFP), что требует прав администратора для регистрации перехватчика.</p>
+            </div>
+
+            <div class="faq-item" data-reveal>
+              <h3 class="faq-question">Как изменить порты и стратегию обхода?</h3>
+              <p class="faq-answer">Все параметры задаются в текстовом файле config.ini. Вы можете настроить позицию разделения (split_position), порядок сегментов (disorder) и сброс протокола QUIC (drop_quic).</p>
+            </div>
+          </div>
+
+          <!-- Фрагмент интерфейса 4: Инспектор конфигурационного файла -->
+          <div class="gui-preview-box" data-ui data-reveal>
+            <div class="gui-header">
+              <span class="gui-title">Конфигурация ядра (config.ini)</span>
+              <span class="simulator-badge">C++17 Singleton</span>
+            </div>
+            <div class="terminal-screen">
+              <pre><code>[General]
+split_position = 2
+disorder = true
+drop_quic = true
+target_ports = 80, 443
+
+# Аппаратное исключение CS2:
+# UDP порты 27000-27100 не затрагиваются</code></pre>
+            </div>
+            <div class="gui-status-banner">
+              Драйвер WinDivert: 0 активных фоновых служб при выходе
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Призыв к действию -->
+    <section class="section" id="download">
+      <div class="container" data-reveal>
+        <div class="cta-box">
+          <h2 class="cta-title">Готово к запуску на Windows</h2>
+          <p class="cta-lead">Скачайте релиз, запустите start.bat и выберите удобный режим: компактное окно в трее или консоль с логом пакетов.</p>
+          <a href="https://github.com/77svizzer/kill-fuck-dpi" class="cta-btn">Открыть репозиторий GitHub</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Подвал -->
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-meta">
+        KILL F#CK DPI — Модульный C++17 обход ТСПУ. Полностью открытый исходный код.
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/77svizzer/kill-fuck-dpi" class="footer-link">GitHub</a>
+        <a href="#features" class="footer-link">Возможности</a>
+        <a href="#faq" class="footer-link">FAQ</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="assets/app.js"></script>
+</body>
+</html>
