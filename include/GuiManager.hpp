@@ -31,7 +31,7 @@ private:
     HWND hwnd_btn_toggle_{NULL};
     HWND hwnd_btn_service_{NULL};
     HWND hwnd_btn_config_{NULL};
-    NOTIFYICONDATAA nid_{};
+    NOTIFYICONDATAW nid_{};
     bool bypass_active_{false};
     bool service_installed_{false};
 };
