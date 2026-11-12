@@ -5,6 +5,7 @@
 namespace kfdpi {
 
 static std::function<void()> g_worker_func;
+static std::function<void()> g_stop_func;
 static SERVICE_STATUS g_svc_status;
 static SERVICE_STATUS_HANDLE g_svc_handle = NULL;
 static std::string g_svc_name;
@@ -15,6 +16,9 @@ static VOID WINAPI ServiceCtrlHandler(DWORD request) {
         case SERVICE_CONTROL_SHUTDOWN:
             g_svc_status.dwCurrentState = SERVICE_STOP_PENDING;
             SetServiceStatus(g_svc_handle, &g_svc_status);
+            if (g_stop_func) {
+                g_stop_func();
+            }
             g_svc_status.dwCurrentState = SERVICE_STOPPED;
             SetServiceStatus(g_svc_handle, &g_svc_status);
             break;
@@ -163,9 +167,10 @@ bool ServiceController::Stop(const std::string& name) {
     return res == TRUE;
 }
 
-int ServiceController::RunAsService(const std::string& name, std::function<void()> worker_func) {
+int ServiceController::RunAsService(const std::string& name, std::function<void()> worker_func, std::function<void()> stop_func) {
     g_svc_name = name;
     g_worker_func = worker_func;
+    g_stop_func = stop_func;
 
     SERVICE_TABLE_ENTRYA dispatch_table[] = {
         { const_cast<LPSTR>(g_svc_name.c_str()), (LPSERVICE_MAIN_FUNCTIONA)ServiceMain },

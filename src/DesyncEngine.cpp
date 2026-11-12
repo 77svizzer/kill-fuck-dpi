@@ -28,12 +28,10 @@ void DesyncEngine::FixChecksums(uint8_t* packet_data, size_t len, WINDIVERT_ADDR
         udp_hdr->Checksum = 0;
     }
 
-    addr.IPChecksum = 0;
-    addr.TCPChecksum = 0;
-    addr.UDPChecksum = 0;
-
-    // Передаем NULL в качестве pAddr, чтобы WinDivert вычислил реальные софтверные чексуммы
-    WinDivertHelperCalcChecksums(packet_data, static_cast<UINT>(len), NULL, 0);
+    // Передаем &addr: WinDivert вычисляет контрольные суммы и одновременно
+    // выставляет флаги IPChecksum = 1, TCPChecksum = 1 для драйвера NDIS,
+    // исключая повторный расчет аппаратным оффлоадом на сетевых картах Realtek/Intel
+    WinDivertHelperCalcChecksums(packet_data, static_cast<UINT>(len), &addr, 0);
 }
 
 bool DesyncEngine::Process(

@@ -157,6 +157,8 @@ int main(int argc, char* argv[]) {
         if (arg == "--service") {
             return kfdpi::ServiceController::RunAsService(SERVICE_NAME, []() {
                 packet_loop(true);
+            }, []() {
+                stop_divert();
             });
         } else if (arg == "--install") {
             if (!kfdpi::ServiceController::IsAdmin()) {
