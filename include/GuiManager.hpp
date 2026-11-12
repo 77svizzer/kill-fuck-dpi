@@ -19,6 +19,12 @@ public:
 
 private:
     GuiManager() = default;
+    ~GuiManager() {
+        if (hfont_) {
+            DeleteObject(hfont_);
+            hfont_ = NULL;
+        }
+    }
 
     static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
     void CreateTrayIcon(HWND hWnd);
@@ -31,6 +37,7 @@ private:
     HWND hwnd_btn_toggle_{NULL};
     HWND hwnd_btn_service_{NULL};
     HWND hwnd_btn_config_{NULL};
+    HFONT hfont_{NULL};
     NOTIFYICONDATAW nid_{};
     bool bypass_active_{false};
     bool service_installed_{false};

@@ -33,7 +33,7 @@ int GuiManager::Run(HINSTANCE hInstance, int nCmdShow) {
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance;
     wc.lpszClassName = CLASS_NAME;
-    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+    wc.hCursor = LoadCursorW(NULL, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
 
     RegisterClassExW(&wc);
@@ -57,44 +57,44 @@ int GuiManager::Run(HINSTANCE hInstance, int nCmdShow) {
     if (!hwnd_main_) return 1;
 
     // Создаем чистый системный шрифт Segoe UI для четкого рендеринга русского текста без сглаживания артефактов
-    HFONT hFont = CreateFontW(
+    hfont_ = CreateFontW(
         16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
         CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI"
     );
-    if (!hFont) {
-        hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+    if (!hfont_) {
+        hfont_ = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
     }
 
     // Заголовок
     HWND hTitle = CreateWindowExW(0, L"STATIC", L"KILL F#CK DPI (Native C++ Engine)",
         WS_VISIBLE | WS_CHILD | SS_CENTER,
         20, 15, 385, 25, hwnd_main_, NULL, hInstance, NULL);
-    SendMessageW(hTitle, WM_SETFONT, (WPARAM)hFont, TRUE);
+    SendMessageW(hTitle, WM_SETFONT, (WPARAM)hfont_, TRUE);
 
     // Метка статуса
     hwnd_status_label_ = CreateWindowExW(0, L"STATIC", L"Статус: Обход отключен",
         WS_VISIBLE | WS_CHILD | SS_CENTER,
         20, 45, 385, 25, hwnd_main_, NULL, hInstance, NULL);
-    SendMessageW(hwnd_status_label_, WM_SETFONT, (WPARAM)hFont, TRUE);
+    SendMessageW(hwnd_status_label_, WM_SETFONT, (WPARAM)hfont_, TRUE);
 
     // Главная кнопка запуска/остановки
     hwnd_btn_toggle_ = CreateWindowExW(0, L"BUTTON", L"Включить обход DPI",
         WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
         40, 80, 345, 40, hwnd_main_, (HMENU)ID_BTN_TOGGLE, hInstance, NULL);
-    SendMessageW(hwnd_btn_toggle_, WM_SETFONT, (WPARAM)hFont, TRUE);
+    SendMessageW(hwnd_btn_toggle_, WM_SETFONT, (WPARAM)hfont_, TRUE);
 
     // Кнопка экстренного сброса сети и выгрузки WinDivert
     hwnd_btn_service_ = CreateWindowExW(0, L"BUTTON", L"Экстренный сброс драйвера сети",
         WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
         40, 130, 345, 32, hwnd_main_, (HMENU)ID_BTN_SERVICE, hInstance, NULL);
-    SendMessageW(hwnd_btn_service_, WM_SETFONT, (WPARAM)hFont, TRUE);
+    SendMessageW(hwnd_btn_service_, WM_SETFONT, (WPARAM)hfont_, TRUE);
 
     // Кнопка открытия config.ini
     hwnd_btn_config_ = CreateWindowExW(0, L"BUTTON", L"Открыть настройки (config.ini)",
         WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
         40, 172, 345, 32, hwnd_main_, (HMENU)ID_BTN_CONFIG, hInstance, NULL);
-    SendMessageW(hwnd_btn_config_, WM_SETFONT, (WPARAM)hFont, TRUE);
+    SendMessageW(hwnd_btn_config_, WM_SETFONT, (WPARAM)hfont_, TRUE);
 
     CreateTrayIcon(hwnd_main_);
     ShowWindow(hwnd_main_, nCmdShow);
@@ -117,8 +117,8 @@ void GuiManager::CreateTrayIcon(HWND hWnd) {
     nid_.uID = 1;
     nid_.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
     nid_.uCallbackMessage = WM_TRAYICON;
-    nid_.hIcon = LoadIcon(NULL, IDI_SHIELD);
-    lstrcpyW(nid_.szTip, L"KILL F#CK DPI");
+    nid_.hIcon = LoadIconW(NULL, IDI_SHIELD);
+    wcsncpy_s(nid_.szTip, sizeof(nid_.szTip)/sizeof(WCHAR), L"KILL F#CK DPI", _TRUNCATE);
     Shell_NotifyIconW(NIM_ADD, &nid_);
 }
 
@@ -133,12 +133,13 @@ void GuiManager::UpdateStatusText() {
     if (bypass_active_) {
         SetWindowTextW(hwnd_status_label_, L"Статус: Обход АКТИВЕН (YouTube 4K, Discord, Сайты)");
         SetWindowTextW(hwnd_btn_toggle_, L"Остановить обход DPI");
-        lstrcpyW(nid_.szTip, L"KILL F#CK DPI - Активен");
+        wcsncpy_s(nid_.szTip, sizeof(nid_.szTip)/sizeof(WCHAR), L"KILL F#CK DPI - Активен", _TRUNCATE);
     } else {
         SetWindowTextW(hwnd_status_label_, L"Статус: Обход отключен");
         SetWindowTextW(hwnd_btn_toggle_, L"Включить обход DPI");
-        lstrcpyW(nid_.szTip, L"KILL F#CK DPI - Остановлен");
+        wcsncpy_s(nid_.szTip, sizeof(nid_.szTip)/sizeof(WCHAR), L"KILL F#CK DPI - Остановлен", _TRUNCATE);
     }
+    nid_.uFlags = NIF_TIP;
     Shell_NotifyIconW(NIM_MODIFY, &nid_);
 }
 
@@ -158,6 +159,7 @@ void GuiManager::ShowContextMenu(HWND hWnd) {
 
     SetForegroundWindow(hWnd);
     TrackPopupMenu(hMenu, TPM_BOTTOMALIGN | TPM_LEFTALIGN, pt.x, pt.y, 0, hWnd, NULL);
+    PostMessageW(hWnd, WM_NULL, 0, 0);
     DestroyMenu(hMenu);
 }
 
@@ -210,6 +212,10 @@ LRESULT CALLBACK GuiManager::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
 
         case WM_DESTROY:
             stop_divert();
+            if (gui.hfont_) {
+                DeleteObject(gui.hfont_);
+                gui.hfont_ = NULL;
+            }
             PostQuitMessage(0);
             break;
 
