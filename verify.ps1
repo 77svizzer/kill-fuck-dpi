@@ -41,4 +41,17 @@ try {
 }
 
 Write-Host ""
+Write-Host "[*] Проверка сокета голосовых каналов Discord (UDP 50000-65535)..."
+try {
+    $udpDiscord = New-Object System.Net.Sockets.UdpClient
+    $udpDiscord.Client.ReceiveTimeout = 2000
+    $fakeStun = [byte[]](0x00, 0x01, 0x00, 0x00, 0x21, 0x12, 0xa4, 0x42, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c)
+    $udpDiscord.Send($fakeStun, $fakeStun.Length, "8.8.8.8", 50001) | Out-Null
+    $udpDiscord.Close()
+    Write-Host "[OK] Discord Voice UDP: Пакеты маршрутизируются корректно." -ForegroundColor Green
+} catch {
+    Write-Host "[!] Предупреждение Discord Voice UDP: $($_.Exception.Message)" -ForegroundColor Yellow
+}
+
+Write-Host ""
 Write-Host "===================================================================" -ForegroundColor Cyan

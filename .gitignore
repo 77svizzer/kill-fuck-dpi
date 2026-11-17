@@ -13,3 +13,4 @@ Release/
 # Logs & temp
 *.log
 *.tmp
+.taste-skill/

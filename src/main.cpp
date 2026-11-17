@@ -12,6 +12,7 @@
 #include "ConfigManager.hpp"
 #include "ProtocolParser.hpp"
 #include "DesyncEngine.hpp"
+#include "HostlistManager.hpp"
 #include "ServiceController.hpp"
 #include "GuiManager.hpp"
 
@@ -29,7 +30,9 @@ static std::thread g_worker_thread;
 
 // Статистика
 static std::atomic<uint64_t> g_stat_tls(0);
+static std::atomic<uint64_t> g_stat_fake(0);
 static std::atomic<uint64_t> g_stat_quic(0);
+static std::atomic<uint64_t> g_stat_discord_voice(0);
 
 void stop_divert();
 
@@ -71,6 +74,9 @@ static void packet_loop(bool is_service) {
     const auto& cfg = kfdpi::ConfigManager::Instance().Get();
     std::string filter = kfdpi::ConfigManager::Instance().BuildFilter();
 
+    // Загрузка списков хостов
+    kfdpi::HostlistManager::Instance().LoadLists(cfg.lists_dir);
+
     g_divert_handle = WinDivertOpen(filter.c_str(), WINDIVERT_LAYER_NETWORK, 0, 0);
     if (g_divert_handle == INVALID_HANDLE_VALUE) {
         g_running = false;
@@ -89,19 +95,59 @@ static void packet_loop(bool is_service) {
     WinDivertSetParam(g_divert_handle, WINDIVERT_PARAM_QUEUE_SIZE, 16 * 1024 * 1024);
 
     kfdpi::DesyncConfig dcfg;
-    dcfg.strategy = cfg.disorder ? kfdpi::DesyncStrategy::Disorder : kfdpi::DesyncStrategy::Split;
-    dcfg.split_pos = static_cast<size_t>(cfg.split_position);
+
+    // 1. Стратегия
+    if (cfg.strategy == "fake_split2") {
+        dcfg.strategy = kfdpi::DesyncStrategy::Fake_Split2;
+    } else if (cfg.strategy == "fake_disorder") {
+        dcfg.strategy = kfdpi::DesyncStrategy::Fake_Disorder;
+    } else if (cfg.strategy == "disorder") {
+        dcfg.strategy = kfdpi::DesyncStrategy::Disorder;
+    } else {
+        dcfg.strategy = kfdpi::DesyncStrategy::Split;
+    }
+
+    // 2. Позиция разделения
+    if (cfg.split_position == "midsld") {
+        dcfg.split_mode = kfdpi::SplitPositionMode::Midsld;
+    } else if (cfg.split_position == "sni") {
+        dcfg.split_mode = kfdpi::SplitPositionMode::Sni;
+    } else {
+        dcfg.split_mode = kfdpi::SplitPositionMode::Fixed;
+        try {
+            dcfg.split_pos = std::stoul(cfg.split_position);
+        } catch (...) {
+            dcfg.split_pos = 2;
+        }
+    }
+
+    // 3. Fooling методы
+    dcfg.fooling = kfdpi::FoolingMethod::None;
+    if (cfg.fooling.find("badsum") != std::string::npos) {
+        dcfg.fooling = dcfg.fooling | kfdpi::FoolingMethod::BadSum;
+    }
+    if (cfg.fooling.find("autottl") != std::string::npos) {
+        dcfg.fooling = dcfg.fooling | kfdpi::FoolingMethod::AutoTTL;
+    }
+
+    dcfg.fake_ttl = static_cast<uint8_t>(cfg.fake_ttl);
     dcfg.drop_quic = cfg.drop_quic;
+    dcfg.discord_voice_fake = cfg.discord_voice_fake;
+    dcfg.use_hostlists = cfg.use_hostlists;
 
     kfdpi::DesyncEngine engine(dcfg);
 
     if (!is_service) {
         std::cout << "===================================================================\n";
-        std::cout << "        KILL F#CK DPI - Модульное ядро (C++17 Engine)              \n";
+        std::cout << "        KILL F#CK DPI - Модульное ядро (C++17 Engine v1.5)         \n";
         std::cout << "===================================================================\n";
-        std::cout << " [*] YouTube 4K: QUIC Drop + TLS Split (ВКЛ)\n";
-        std::cout << " [*] Discord (текст + голос): Активен\n";
-        std::cout << " [*] Заблокированные сайты (Rutracker, Xplay.gg): Активен\n";
+        std::cout << " [*] Стратегия: " << cfg.strategy << " (midsld SNI split + " << cfg.fooling << ")\n";
+        std::cout << " [*] YouTube 4K: QUIC Drop + Fake TLS ClientHello (ВКЛ)\n";
+        std::cout << " [*] Discord: Чат (TLS SNI) + Голосовые каналы (UDP 50000-65535 Fake STUN)\n";
+        std::cout << " [*] Списки хостов: Google: " << kfdpi::HostlistManager::Instance().GetGoogleCount()
+                  << " | General: " << kfdpi::HostlistManager::Instance().GetGeneralCount()
+                  << " | Gaming: " << kfdpi::HostlistManager::Instance().GetGamingCount()
+                  << " | Exclude: " << kfdpi::HostlistManager::Instance().GetExcludeCount() << "\n";
         std::cout << " [*] Игровой трафик (CS2 / FACEIT / Xplay UDP): Аппаратный NDIS Bypass (0ms)\n";
         std::cout << "-------------------------------------------------------------------\n";
         std::cout << " [i] Работает в фоне. Для остановки нажмите Ctrl + C.\n";
@@ -135,20 +181,29 @@ static void packet_loop(bool is_service) {
             continue;
         }
 
-        if (fragments.size() > 1) {
+        if (parsed.is_discord_voice) {
+            g_stat_discord_voice++;
+        }
+
+        if (fragments.size() > 1 && parsed.l7 == kfdpi::L7Protocol::TLS_ClientHello) {
             g_stat_tls++;
         }
 
         for (const auto& frag : fragments) {
-            WinDivertSend(g_divert_handle, frag.buffer.data(), static_cast<UINT>(frag.buffer.size()), nullptr, &frag.address);
+            if (frag.is_fake) {
+                g_stat_fake++;
+            }
+            WinDivertSend(g_divert_handle, const_cast<uint8_t*>(frag.buffer.data()), static_cast<UINT>(frag.buffer.size()), nullptr, const_cast<WINDIVERT_ADDRESS*>(&frag.address));
         }
 
         if (!is_service) {
             auto now = std::chrono::steady_clock::now();
             if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_stats_print).count() >= 1000) {
                 last_stats_print = now;
-                std::cout << "\r[*] Статус: TLS десинхронизировано: " << g_stat_tls
-                          << " | QUIC сброшено: " << g_stat_quic << "   " << std::flush;
+                std::cout << "\r[*] Статус: TLS: " << g_stat_tls
+                          << " | Fake: " << g_stat_fake
+                          << " | QUIC: " << g_stat_quic
+                          << " | Discord Voice: " << g_stat_discord_voice << "   " << std::flush;
             }
         }
     }
@@ -183,6 +238,7 @@ int main(int argc, char* argv[]) {
     kfdpi::ServiceController::ForceUnloadWinDivertKernelDriver();
 
     kfdpi::ConfigManager::Instance().Load("config.ini");
+    kfdpi::HostlistManager::Instance().LoadLists(kfdpi::ConfigManager::Instance().Get().lists_dir);
 
     bool force_console = false;
     bool force_gui = false;
@@ -232,11 +288,11 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--stop") {
             return kfdpi::ServiceController::Stop(SERVICE_NAME) ? 0 : 1;
         } else if (arg == "--help" || arg == "-h") {
-            std::cout << "KILL F#CK DPI - Модульная C++ утилита обхода ТСПУ\n\n";
+            std::cout << "KILL F#CK DPI - Модульная C++ утилита обхода ТСПУ (версия 1.5)\n\n";
             std::cout << "Опции запуска:\n";
             std::cout << "  --gui             Запуск графической панели управления (по умолчанию при даблклике)\n";
-            std::cout << "  --console         Запуск в интерактивном окне консоли\n";
-            std::cout << "  --install         Установить службу с автозапуском\n";
+            std::cout << "  --console         Запуск в интерактивном окне консоли с логом пакетов\n";
+            std::cout << "  --install         Установить службу Windows (ручной запуск)\n";
             std::cout << "  --uninstall       Остановить и удалить службу\n";
             std::cout << "  --start           Запустить службу\n";
             std::cout << "  --stop            Остановить службу\n";
@@ -259,7 +315,7 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    // По умолчанию скрываем черное консольное окно и запускаем аккуратный GUI с треем
+    // По умолчанию скрываем консольное окно и запускаем аккуратный Win32 Unicode GUI с треем
     HWND hConsole = GetConsoleWindow();
     if (hConsole) {
         ShowWindow(hConsole, SW_HIDE);

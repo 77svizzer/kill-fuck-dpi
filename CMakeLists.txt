@@ -15,12 +15,22 @@ link_directories(${CMAKE_CURRENT_SOURCE_DIR}/lib)
 
 add_executable(dpi_bypass
     src/main.cpp
+    src/ProtocolParser.cpp
+    src/DesyncEngine.cpp
+    src/ConfigManager.cpp
+    src/HostlistManager.cpp
+    src/ServiceController.cpp
+    src/GuiManager.cpp
 )
 
 target_link_libraries(dpi_bypass PRIVATE
     WinDivert
     ws2_32
     advapi32
+    shell32
+    comctl32
+    user32
+    gdi32
 )
 
 # Автоматическое копирование необходимых runtime файлов в директорию сборки
