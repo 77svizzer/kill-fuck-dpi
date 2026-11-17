@@ -28,11 +28,11 @@ static std::atomic<bool> g_running(false);
 static HANDLE g_divert_handle = INVALID_HANDLE_VALUE;
 static std::thread g_worker_thread;
 
-// Статистика
-static std::atomic<uint64_t> g_stat_tls(0);
-static std::atomic<uint64_t> g_stat_fake(0);
-static std::atomic<uint64_t> g_stat_quic(0);
-static std::atomic<uint64_t> g_stat_discord_voice(0);
+// Глобальная статистика пакетов
+std::atomic<uint64_t> g_stat_tls(0);
+std::atomic<uint64_t> g_stat_fake(0);
+std::atomic<uint64_t> g_stat_quic(0);
+std::atomic<uint64_t> g_stat_discord_voice(0);
 
 void stop_divert();
 

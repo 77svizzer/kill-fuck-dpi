@@ -74,7 +74,13 @@ void DesyncEngine::FixChecksums(uint8_t* packet_data, size_t len, WINDIVERT_ADDR
         udp_hdr->Checksum = 0;
     }
 
-    WinDivertHelperCalcChecksums(packet_data, static_cast<UINT>(len), &addr, 0);
+    // Вычисляем 100% реальные контрольные суммы прямо в буфер пакета (nullptr вместо &addr)
+    WinDivertHelperCalcChecksums(packet_data, static_cast<UINT>(len), nullptr, 0);
+
+    // Сбрасываем флаги NDIS оффлоада, чтобы сетевая карта отправляла готовые суммы без сбоев
+    addr.IPChecksum = 0;
+    addr.TCPChecksum = 0;
+    addr.UDPChecksum = 0;
 }
 
 void DesyncEngine::ApplyBadChecksum(uint8_t* packet_data, size_t len, WINDIVERT_ADDRESS& addr) {
@@ -88,21 +94,19 @@ void DesyncEngine::ApplyBadChecksum(uint8_t* packet_data, size_t len, WINDIVERT_
         &tcp_hdr, nullptr, nullptr, nullptr, nullptr, nullptr
     );
 
-    // 1. Рассчитываем валидную контрольную сумму для IP заголовка, чтобы маршрутизаторы не отбросили пакет на L3
+    // 1. Рассчитываем валидную сумму для IP прямо в буфер
     if (ip_hdr != nullptr) {
         ip_hdr->Checksum = 0;
     }
     WinDivertHelperCalcChecksums(packet_data, static_cast<UINT>(len), nullptr, WINDIVERT_HELPER_NO_TCP_CHECKSUM);
 
-    // 2. Искажаем контрольную сумму TCP заголовка (BadSum)
+    // 2. Искажаем TCP сумму
     if (tcp_hdr != nullptr) {
         tcp_hdr->Checksum = htons(0xDEAD);
     }
 
-    // 3. Сообщаем драйверу WinDivert и сетевой карте NDIS, что контрольные суммы уже вычислены,
-    // чтобы аппаратный оффлоад (Tx Checksum Offload) не исправил нашу поврежденную сумму на валидную!
-    addr.IPChecksum = 1;
-    addr.TCPChecksum = 1;
+    addr.IPChecksum = 0;
+    addr.TCPChecksum = 0;
 }
 
 PacketFragment DesyncEngine::CreateFakeTcpPacket(

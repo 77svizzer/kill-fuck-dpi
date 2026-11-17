@@ -31,6 +31,7 @@ target_link_libraries(dpi_bypass PRIVATE
     comctl32
     user32
     gdi32
+    dwmapi
 )
 
 # Автоматическое копирование необходимых runtime файлов в директорию сборки

@@ -34,7 +34,7 @@ call "%VCVARS%" >nul 2>&1
 
 :DO_BUILD
 echo [*] Compiling modular C++17 engine (GUI + Service + Core) -> dpi_bypass.exe...
-cl.exe /nologo /EHsc /O2 /utf-8 /DUNICODE /D_UNICODE /std:c++17 /Iinclude src\main.cpp src\ProtocolParser.cpp src\DesyncEngine.cpp src\ConfigManager.cpp src\HostlistManager.cpp src\ServiceController.cpp src\GuiManager.cpp /link /LIBPATH:lib WinDivert.lib ws2_32.lib advapi32.lib shell32.lib comctl32.lib user32.lib gdi32.lib /OUT:dpi_bypass.exe
+cl.exe /nologo /EHsc /O2 /utf-8 /DUNICODE /D_UNICODE /std:c++17 /Iinclude src\main.cpp src\ProtocolParser.cpp src\DesyncEngine.cpp src\ConfigManager.cpp src\HostlistManager.cpp src\ServiceController.cpp src\GuiManager.cpp /link /LIBPATH:lib WinDivert.lib ws2_32.lib advapi32.lib shell32.lib comctl32.lib user32.lib gdi32.lib dwmapi.lib /OUT:dpi_bypass.exe
 
 if %errorlevel% equ 0 (
     echo.
