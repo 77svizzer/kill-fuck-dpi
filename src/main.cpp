@@ -4,6 +4,7 @@
 #include <ws2tcpip.h>
 #include <iostream>
 #include <atomic>
+#include <mutex>
 #include <vector>
 #include <chrono>
 #include <thread>
@@ -25,7 +26,7 @@
 #define SERVICE_DISPLAY_NAME "KILL F#CK DPI Service"
 
 static std::atomic<bool> g_running(false);
-static HANDLE g_divert_handle = INVALID_HANDLE_VALUE;
+static std::atomic<HANDLE> g_divert_handle{INVALID_HANDLE_VALUE};
 static std::thread g_worker_thread;
 
 // Глобальная статистика пакетов
@@ -43,13 +44,17 @@ static LONG WINAPI CrashHandler(EXCEPTION_POINTERS*) {
 
 void stop_divert() {
     g_running = false;
-    if (g_divert_handle != INVALID_HANDLE_VALUE) {
-        WinDivertShutdown(g_divert_handle, WINDIVERT_SHUTDOWN_BOTH);
-        WinDivertClose(g_divert_handle);
-        g_divert_handle = INVALID_HANDLE_VALUE;
+    HANDLE handle = g_divert_handle.exchange(INVALID_HANDLE_VALUE);
+    if (handle != INVALID_HANDLE_VALUE) {
+        WinDivertShutdown(handle, WINDIVERT_SHUTDOWN_BOTH);
+        WinDivertClose(handle);
     }
+    static std::mutex s_join_mutex;
     if (g_worker_thread.joinable() && std::this_thread::get_id() != g_worker_thread.get_id()) {
-        g_worker_thread.join();
+        std::unique_lock<std::mutex> lock(s_join_mutex, std::try_to_lock);
+        if (lock.owns_lock() && g_worker_thread.joinable() && std::this_thread::get_id() != g_worker_thread.get_id()) {
+            g_worker_thread.join();
+        }
     }
     // Полная выгрузка драйвера WinDivert из ядра Windows,
     // чтобы интернет никогда не ломался при закрытии или перезагрузке
@@ -57,7 +62,7 @@ void stop_divert() {
 }
 
 bool is_divert_running() {
-    return g_running.load() && (g_divert_handle != INVALID_HANDLE_VALUE);
+    return g_running.load() && (g_divert_handle.load() != INVALID_HANDLE_VALUE);
 }
 
 static BOOL WINAPI console_handler(DWORD signal) {
@@ -320,13 +325,17 @@ int main(int argc, char* argv[]) {
 
     // Защита от одновременного запуска нескольких экземпляров GUI
     HANDLE hMutex = CreateMutexW(NULL, FALSE, L"Global\\KillFuckDpi_SingleInstance");
-    if (hMutex != NULL && GetLastError() == ERROR_ALREADY_EXISTS) {
+    DWORD mutexErr = GetLastError();
+    if ((hMutex != NULL && mutexErr == ERROR_ALREADY_EXISTS) || (hMutex == NULL && mutexErr == ERROR_ACCESS_DENIED)) {
         HWND existing_hwnd = FindWindowW(L"KillFuckDpiGuiWindow", NULL);
         if (existing_hwnd) {
+            ShowWindow(existing_hwnd, SW_SHOW);
             ShowWindow(existing_hwnd, SW_RESTORE);
             SetForegroundWindow(existing_hwnd);
         }
-        CloseHandle(hMutex);
+        if (hMutex) {
+            CloseHandle(hMutex);
+        }
         return 0;
     }
 
