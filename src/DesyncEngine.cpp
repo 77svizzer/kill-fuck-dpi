@@ -145,7 +145,14 @@ PacketFragment DesyncEngine::CreateFakeTcpPacket(
     }
 
     if (tcp != nullptr && parsed.tcp_hdr != nullptr) {
-        tcp->SeqNum = parsed.tcp_hdr->SeqNum;
+        if (config_.fooling & FoolingMethod::BadSeq) {
+            // BadSeq: смещаем номер последовательности на 10000 байт назад
+            // Целевой сервер (Google/Discord) отбрасывает фейк как out-of-window дубликат, а ТСПУ принимает
+            uint32_t original_seq = ntohl(parsed.tcp_hdr->SeqNum);
+            tcp->SeqNum = htonl(original_seq - 10000);
+        } else {
+            tcp->SeqNum = parsed.tcp_hdr->SeqNum;
+        }
         tcp->Psh = 0;
     }
 

@@ -7,10 +7,10 @@
 namespace kfdpi {
 
 struct RuntimeConfig {
-    std::string strategy{"fake_split2"};   // fake_split2, fake_disorder, split2, disorder
-    std::string split_position{"midsld"};  // midsld, sni, или числовое смещение (например "2")
-    std::string fooling{"badsum,autottl"}; // badsum, autottl, badsum,autottl, none
-    int fake_ttl{6};                       // TTL для фейковых пакетов (рекомендуется 5-8)
+    std::string strategy{"disorder"};      // disorder (рекомендуется для ТСПУ РФ), fake_split2, fake_disorder, split2
+    std::string split_position{"2"};       // 2 (отсекает 0x16 0x03 от тела SNI), midsld, sni
+    std::string fooling{"badseq,autottl"}; // badseq, autottl, badseq,autottl, badsum, none
+    int fake_ttl{4};                       // TTL для фейковых пакетов (3-5 хопов)
     bool drop_quic{true};                  // Сброс исходящего QUIC на UDP 443
     bool discord_voice_fake{true};         // Обход голосовых каналов Discord UDP 50000-65535
     bool use_hostlists{true};              // Использование списков из папки lists/

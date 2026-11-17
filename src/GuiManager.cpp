@@ -72,14 +72,14 @@ int GuiManager::Run(HINSTANCE hInstance, int nCmdShow) {
         20, 15, 385, 25, hwnd_main_, NULL, hInstance, NULL);
     SendMessageW(hTitle, WM_SETFONT, (WPARAM)hfont_, TRUE);
 
-    // Метка статуса
-    hwnd_status_label_ = CreateWindowExW(0, L"STATIC", L"Статус: Обход отключен",
+    // Метка статуса (по умолчанию обход включается сразу при запуске)
+    hwnd_status_label_ = CreateWindowExW(0, L"STATIC", L"Статус: Обход АКТИВЕН (YouTube 4K, Discord, Сайты)",
         WS_VISIBLE | WS_CHILD | SS_CENTER,
         20, 45, 385, 25, hwnd_main_, NULL, hInstance, NULL);
     SendMessageW(hwnd_status_label_, WM_SETFONT, (WPARAM)hfont_, TRUE);
 
     // Главная кнопка запуска/остановки
-    hwnd_btn_toggle_ = CreateWindowExW(0, L"BUTTON", L"Включить обход DPI",
+    hwnd_btn_toggle_ = CreateWindowExW(0, L"BUTTON", L"Остановить обход DPI",
         WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
         40, 80, 345, 40, hwnd_main_, (HMENU)ID_BTN_TOGGLE, hInstance, NULL);
     SendMessageW(hwnd_btn_toggle_, WM_SETFONT, (WPARAM)hfont_, TRUE);
@@ -99,6 +99,10 @@ int GuiManager::Run(HINSTANCE hInstance, int nCmdShow) {
     CreateTrayIcon(hwnd_main_);
     ShowWindow(hwnd_main_, nCmdShow);
     UpdateWindow(hwnd_main_);
+
+    // Автоматический старт обхода при запуске программы (без необходимости кликать вручную)
+    start_divert_worker();
+    SetBypassState(true);
 
     MSG msg = {};
     while (GetMessageW(&msg, NULL, 0, 0)) {

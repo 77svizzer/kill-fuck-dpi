@@ -126,6 +126,9 @@ static void packet_loop(bool is_service) {
     if (cfg.fooling.find("badsum") != std::string::npos) {
         dcfg.fooling = dcfg.fooling | kfdpi::FoolingMethod::BadSum;
     }
+    if (cfg.fooling.find("badseq") != std::string::npos) {
+        dcfg.fooling = dcfg.fooling | kfdpi::FoolingMethod::BadSeq;
+    }
     if (cfg.fooling.find("autottl") != std::string::npos) {
         dcfg.fooling = dcfg.fooling | kfdpi::FoolingMethod::AutoTTL;
     }
@@ -315,11 +318,27 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
+    // Защита от одновременного запуска нескольких экземпляров GUI
+    HANDLE hMutex = CreateMutexW(NULL, FALSE, L"Global\\KillFuckDpi_SingleInstance");
+    if (hMutex != NULL && GetLastError() == ERROR_ALREADY_EXISTS) {
+        HWND existing_hwnd = FindWindowW(L"KillFuckDpiGuiWindow", NULL);
+        if (existing_hwnd) {
+            ShowWindow(existing_hwnd, SW_RESTORE);
+            SetForegroundWindow(existing_hwnd);
+        }
+        CloseHandle(hMutex);
+        return 0;
+    }
+
     // По умолчанию скрываем консольное окно и запускаем аккуратный Win32 Unicode GUI с треем
     HWND hConsole = GetConsoleWindow();
     if (hConsole) {
         ShowWindow(hConsole, SW_HIDE);
     }
     HINSTANCE hInst = GetModuleHandle(NULL);
-    return kfdpi::GuiManager::Instance().Run(hInst, SW_NORMAL);
+    int res = kfdpi::GuiManager::Instance().Run(hInst, SW_NORMAL);
+    if (hMutex) {
+        CloseHandle(hMutex);
+    }
+    return res;
 }

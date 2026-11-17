@@ -32,7 +32,9 @@ enum class FoolingMethod : uint8_t {
     None = 0,
     BadSum = 1 << 0,
     AutoTTL = 1 << 1,
-    BadSum_AutoTTL = (1 << 0) | (1 << 1)
+    BadSeq = 1 << 2,
+    BadSum_AutoTTL = (1 << 0) | (1 << 1),
+    BadSeq_AutoTTL = (1 << 2) | (1 << 1)
 };
 
 inline FoolingMethod operator|(FoolingMethod a, FoolingMethod b) {
@@ -44,11 +46,11 @@ inline bool operator&(FoolingMethod a, FoolingMethod b) {
 }
 
 struct DesyncConfig {
-    DesyncStrategy strategy{DesyncStrategy::Fake_Split2};
-    SplitPositionMode split_mode{SplitPositionMode::Midsld};
+    DesyncStrategy strategy{DesyncStrategy::Disorder};
+    SplitPositionMode split_mode{SplitPositionMode::Fixed};
     size_t split_pos{2};
-    FoolingMethod fooling{FoolingMethod::BadSum_AutoTTL};
-    uint8_t fake_ttl{6};
+    FoolingMethod fooling{FoolingMethod::BadSeq_AutoTTL};
+    uint8_t fake_ttl{4};
     bool drop_quic{true};
     bool discord_voice_fake{true};
     bool use_hostlists{true};
