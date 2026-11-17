@@ -50,12 +50,26 @@ static const uint8_t FAKE_STUN_REQUEST[] = {
 };
 
 void DesyncEngine::FixChecksums(uint8_t* packet_data, size_t len, WINDIVERT_ADDRESS& addr) {
+    if (!packet_data || len < sizeof(WINDIVERT_IPHDR)) {
+        return;
+    }
+
+    // Защитная синхронизация L3: гарантируем совпадение длины заголовка с размером буфера
+    uint8_t version = (packet_data[0] >> 4) & 0x0F;
+    if (version == 4) {
+        auto* ip = reinterpret_cast<PWINDIVERT_IPHDR>(packet_data);
+        ip->Length = htons(static_cast<uint16_t>(len));
+    } else if (version == 6 && len >= sizeof(WINDIVERT_IPV6HDR)) {
+        auto* ip6 = reinterpret_cast<PWINDIVERT_IPV6HDR>(packet_data);
+        ip6->Length = htons(static_cast<uint16_t>(len - sizeof(WINDIVERT_IPV6HDR)));
+    }
+
     PWINDIVERT_IPHDR ip_hdr = nullptr;
     PWINDIVERT_IPV6HDR ip6_hdr = nullptr;
     PWINDIVERT_TCPHDR tcp_hdr = nullptr;
     PWINDIVERT_UDPHDR udp_hdr = nullptr;
 
-    WinDivertHelperParsePacket(
+    BOOL parse_ok = WinDivertHelperParsePacket(
         packet_data, static_cast<UINT>(len),
         &ip_hdr, &ip6_hdr, nullptr,
         nullptr, nullptr,
@@ -63,6 +77,24 @@ void DesyncEngine::FixChecksums(uint8_t* packet_data, size_t len, WINDIVERT_ADDR
         nullptr, nullptr,
         nullptr, nullptr
     );
+
+    // Двухуровневый fallback: прямое извлечение указателей при сбое парсера
+    if (!parse_ok || (ip_hdr == nullptr && ip6_hdr == nullptr)) {
+        if (version == 4) {
+            ip_hdr = reinterpret_cast<PWINDIVERT_IPHDR>(packet_data);
+        } else if (version == 6 && len >= sizeof(WINDIVERT_IPV6HDR)) {
+            ip6_hdr = reinterpret_cast<PWINDIVERT_IPV6HDR>(packet_data);
+        }
+    }
+    if (!parse_ok || (tcp_hdr == nullptr && udp_hdr == nullptr)) {
+        size_t ip_len = (version == 4 && ip_hdr) ? (ip_hdr->HdrLength * 4) : sizeof(WINDIVERT_IPV6HDR);
+        uint8_t proto = (version == 4 && ip_hdr) ? ip_hdr->Protocol : (ip6_hdr ? ip6_hdr->NextHdr : 0);
+        if (proto == IPPROTO_TCP && len >= ip_len + sizeof(WINDIVERT_TCPHDR)) {
+            tcp_hdr = reinterpret_cast<PWINDIVERT_TCPHDR>(packet_data + ip_len);
+        } else if (proto == IPPROTO_UDP && len >= ip_len + sizeof(WINDIVERT_UDPHDR)) {
+            udp_hdr = reinterpret_cast<PWINDIVERT_UDPHDR>(packet_data + ip_len);
+        }
+    }
 
     if (ip_hdr != nullptr) {
         ip_hdr->Checksum = 0;
@@ -84,15 +116,42 @@ void DesyncEngine::FixChecksums(uint8_t* packet_data, size_t len, WINDIVERT_ADDR
 }
 
 void DesyncEngine::ApplyBadChecksum(uint8_t* packet_data, size_t len, WINDIVERT_ADDRESS& addr) {
+    if (!packet_data || len < sizeof(WINDIVERT_IPHDR)) {
+        return;
+    }
+
+    uint8_t version = (packet_data[0] >> 4) & 0x0F;
+    if (version == 4) {
+        auto* ip = reinterpret_cast<PWINDIVERT_IPHDR>(packet_data);
+        ip->Length = htons(static_cast<uint16_t>(len));
+    } else if (version == 6 && len >= sizeof(WINDIVERT_IPV6HDR)) {
+        auto* ip6 = reinterpret_cast<PWINDIVERT_IPV6HDR>(packet_data);
+        ip6->Length = htons(static_cast<uint16_t>(len - sizeof(WINDIVERT_IPV6HDR)));
+    }
+
     PWINDIVERT_IPHDR ip_hdr = nullptr;
     PWINDIVERT_IPV6HDR ip6_hdr = nullptr;
     PWINDIVERT_TCPHDR tcp_hdr = nullptr;
 
-    WinDivertHelperParsePacket(
+    BOOL parse_ok = WinDivertHelperParsePacket(
         packet_data, static_cast<UINT>(len),
         &ip_hdr, &ip6_hdr, nullptr, nullptr, nullptr,
         &tcp_hdr, nullptr, nullptr, nullptr, nullptr, nullptr
     );
+
+    if (!parse_ok || (ip_hdr == nullptr && ip6_hdr == nullptr)) {
+        if (version == 4) {
+            ip_hdr = reinterpret_cast<PWINDIVERT_IPHDR>(packet_data);
+        } else if (version == 6 && len >= sizeof(WINDIVERT_IPV6HDR)) {
+            ip6_hdr = reinterpret_cast<PWINDIVERT_IPV6HDR>(packet_data);
+        }
+    }
+    if (!parse_ok || tcp_hdr == nullptr) {
+        size_t ip_len = (version == 4 && ip_hdr) ? (ip_hdr->HdrLength * 4) : sizeof(WINDIVERT_IPV6HDR);
+        if (len >= ip_len + sizeof(WINDIVERT_TCPHDR)) {
+            tcp_hdr = reinterpret_cast<PWINDIVERT_TCPHDR>(packet_data + ip_len);
+        }
+    }
 
     // 1. Рассчитываем валидную сумму для IP прямо в буфер
     if (ip_hdr != nullptr) {
@@ -127,14 +186,39 @@ PacketFragment DesyncEngine::CreateFakeTcpPacket(
     fake.address = addr;
     fake.is_fake = true;
 
+    // ОБЯЗАТЕЛЬНО: Предварительно обновляем длину IP/IPv6 в заголовке нового буфера ДО вызова парсера,
+    // иначе WinDivertHelperParsePacket бракует пакет из-за длины оригинального пакета (e.g. 517 > 186)
+    if (parsed.ip_ver == IpVersion::IPv4 || parsed.ip_hdr != nullptr) {
+        auto* ip_pre = reinterpret_cast<PWINDIVERT_IPHDR>(fake.buffer.data());
+        ip_pre->Length = htons(static_cast<uint16_t>(total_fake_len));
+    } else if (parsed.ip_ver == IpVersion::IPv6 || parsed.ip6_hdr != nullptr) {
+        auto* ip6_pre = reinterpret_cast<PWINDIVERT_IPV6HDR>(fake.buffer.data());
+        ip6_pre->Length = htons(static_cast<uint16_t>(total_fake_len - sizeof(WINDIVERT_IPV6HDR)));
+    }
+
     PWINDIVERT_IPHDR ip = nullptr;
     PWINDIVERT_IPV6HDR ip6 = nullptr;
     PWINDIVERT_TCPHDR tcp = nullptr;
-    WinDivertHelperParsePacket(
+    BOOL parse_ok = WinDivertHelperParsePacket(
         fake.buffer.data(), static_cast<UINT>(total_fake_len),
         &ip, &ip6, nullptr, nullptr, nullptr,
         &tcp, nullptr, nullptr, nullptr, nullptr, nullptr
     );
+
+    // Прямой fallback по смещениям на случай нестандартных пакетов
+    if (!parse_ok || (ip == nullptr && ip6 == nullptr) || tcp == nullptr) {
+        if (parsed.ip_ver == IpVersion::IPv4 || parsed.ip_hdr != nullptr) {
+            ip = reinterpret_cast<PWINDIVERT_IPHDR>(fake.buffer.data());
+        } else if (parsed.ip_ver == IpVersion::IPv6 || parsed.ip6_hdr != nullptr) {
+            ip6 = reinterpret_cast<PWINDIVERT_IPV6HDR>(fake.buffer.data());
+        }
+        if (parsed.tcp_hdr != nullptr) {
+            size_t tcp_offset = reinterpret_cast<const uint8_t*>(parsed.tcp_hdr) - raw_packet;
+            if (tcp_offset + sizeof(WINDIVERT_TCPHDR) <= total_fake_len) {
+                tcp = reinterpret_cast<PWINDIVERT_TCPHDR>(fake.buffer.data() + tcp_offset);
+            }
+        }
+    }
 
     if (ip != nullptr) {
         ip->Length = htons(static_cast<uint16_t>(total_fake_len));
@@ -293,14 +377,46 @@ bool DesyncEngine::ProcessDiscordVoice(
         fake_stun.address = addr;
         fake_stun.is_fake = true;
 
+        // Предварительное обновление длины IP/IPv6 и UDP ДО вызова WinDivertHelperParsePacket
+        if (parsed.ip_ver == IpVersion::IPv4 || parsed.ip_hdr != nullptr) {
+            auto* ip_pre = reinterpret_cast<PWINDIVERT_IPHDR>(fake_stun.buffer.data());
+            ip_pre->Length = htons(static_cast<uint16_t>(total_fake_len));
+        } else if (parsed.ip_ver == IpVersion::IPv6 || parsed.ip6_hdr != nullptr) {
+            auto* ip6_pre = reinterpret_cast<PWINDIVERT_IPV6HDR>(fake_stun.buffer.data());
+            ip6_pre->Length = htons(static_cast<uint16_t>(total_fake_len - sizeof(WINDIVERT_IPV6HDR)));
+        }
+
+        if (parsed.udp_hdr != nullptr) {
+            size_t udp_offset = reinterpret_cast<const uint8_t*>(parsed.udp_hdr) - raw_packet;
+            if (udp_offset + sizeof(WINDIVERT_UDPHDR) <= total_fake_len) {
+                auto* udp_pre = reinterpret_cast<PWINDIVERT_UDPHDR>(fake_stun.buffer.data() + udp_offset);
+                udp_pre->Length = htons(static_cast<uint16_t>(sizeof(WINDIVERT_UDPHDR) + stun_payload_len));
+            }
+        }
+
         PWINDIVERT_IPHDR ip = nullptr;
         PWINDIVERT_IPV6HDR ip6 = nullptr;
         PWINDIVERT_UDPHDR udp = nullptr;
-        WinDivertHelperParsePacket(
+        BOOL parse_ok = WinDivertHelperParsePacket(
             fake_stun.buffer.data(), static_cast<UINT>(total_fake_len),
             &ip, &ip6, nullptr, nullptr, nullptr,
             nullptr, &udp, nullptr, nullptr, nullptr, nullptr
         );
+
+        // Fallback по смещениям
+        if (!parse_ok || (ip == nullptr && ip6 == nullptr) || udp == nullptr) {
+            if (parsed.ip_ver == IpVersion::IPv4 || parsed.ip_hdr != nullptr) {
+                ip = reinterpret_cast<PWINDIVERT_IPHDR>(fake_stun.buffer.data());
+            } else if (parsed.ip_ver == IpVersion::IPv6 || parsed.ip6_hdr != nullptr) {
+                ip6 = reinterpret_cast<PWINDIVERT_IPV6HDR>(fake_stun.buffer.data());
+            }
+            if (parsed.udp_hdr != nullptr) {
+                size_t udp_offset = reinterpret_cast<const uint8_t*>(parsed.udp_hdr) - raw_packet;
+                if (udp_offset + sizeof(WINDIVERT_UDPHDR) <= total_fake_len) {
+                    udp = reinterpret_cast<PWINDIVERT_UDPHDR>(fake_stun.buffer.data() + udp_offset);
+                }
+            }
+        }
 
         if (ip != nullptr) {
             ip->Length = htons(static_cast<uint16_t>(total_fake_len));
@@ -381,14 +497,38 @@ bool DesyncEngine::ProcessTcp(
     memcpy(frag1.buffer.data() + header_len, parsed.payload, seg1_payload_len);
     frag1.address = addr;
 
+    // Предварительное обновление длины IP/IPv6 ДО вызова WinDivertHelperParsePacket
+    if (parsed.ip_ver == IpVersion::IPv4 || parsed.ip_hdr != nullptr) {
+        auto* ip_pre = reinterpret_cast<PWINDIVERT_IPHDR>(frag1.buffer.data());
+        ip_pre->Length = htons(static_cast<uint16_t>(seg1_total_len));
+    } else if (parsed.ip_ver == IpVersion::IPv6 || parsed.ip6_hdr != nullptr) {
+        auto* ip6_pre = reinterpret_cast<PWINDIVERT_IPV6HDR>(frag1.buffer.data());
+        ip6_pre->Length = htons(static_cast<uint16_t>(seg1_total_len - sizeof(WINDIVERT_IPV6HDR)));
+    }
+
     PWINDIVERT_IPHDR ip1 = nullptr;
     PWINDIVERT_IPV6HDR ip6_1 = nullptr;
     PWINDIVERT_TCPHDR tcp1 = nullptr;
-    WinDivertHelperParsePacket(
+    BOOL parse1_ok = WinDivertHelperParsePacket(
         frag1.buffer.data(), static_cast<UINT>(seg1_total_len),
         &ip1, &ip6_1, nullptr, nullptr, nullptr,
         &tcp1, nullptr, nullptr, nullptr, nullptr, nullptr
     );
+
+    // Fallback по смещениям
+    if (!parse1_ok || (ip1 == nullptr && ip6_1 == nullptr) || tcp1 == nullptr) {
+        if (parsed.ip_ver == IpVersion::IPv4 || parsed.ip_hdr != nullptr) {
+            ip1 = reinterpret_cast<PWINDIVERT_IPHDR>(frag1.buffer.data());
+        } else if (parsed.ip_ver == IpVersion::IPv6 || parsed.ip6_hdr != nullptr) {
+            ip6_1 = reinterpret_cast<PWINDIVERT_IPV6HDR>(frag1.buffer.data());
+        }
+        if (parsed.tcp_hdr != nullptr) {
+            size_t tcp_offset = reinterpret_cast<const uint8_t*>(parsed.tcp_hdr) - raw_packet;
+            if (tcp_offset + sizeof(WINDIVERT_TCPHDR) <= seg1_total_len) {
+                tcp1 = reinterpret_cast<PWINDIVERT_TCPHDR>(frag1.buffer.data() + tcp_offset);
+            }
+        }
+    }
 
     if (ip1 != nullptr) {
         ip1->Length = htons(static_cast<uint16_t>(seg1_total_len));
@@ -407,14 +547,38 @@ bool DesyncEngine::ProcessTcp(
     memcpy(frag2.buffer.data() + header_len, parsed.payload + seg1_payload_len, seg2_payload_len);
     frag2.address = addr;
 
+    // Предварительное обновление длины IP/IPv6 ДО вызова WinDivertHelperParsePacket
+    if (parsed.ip_ver == IpVersion::IPv4 || parsed.ip_hdr != nullptr) {
+        auto* ip_pre = reinterpret_cast<PWINDIVERT_IPHDR>(frag2.buffer.data());
+        ip_pre->Length = htons(static_cast<uint16_t>(seg2_total_len));
+    } else if (parsed.ip_ver == IpVersion::IPv6 || parsed.ip6_hdr != nullptr) {
+        auto* ip6_pre = reinterpret_cast<PWINDIVERT_IPV6HDR>(frag2.buffer.data());
+        ip6_pre->Length = htons(static_cast<uint16_t>(seg2_total_len - sizeof(WINDIVERT_IPV6HDR)));
+    }
+
     PWINDIVERT_IPHDR ip2 = nullptr;
     PWINDIVERT_IPV6HDR ip6_2 = nullptr;
     PWINDIVERT_TCPHDR tcp2 = nullptr;
-    WinDivertHelperParsePacket(
+    BOOL parse2_ok = WinDivertHelperParsePacket(
         frag2.buffer.data(), static_cast<UINT>(seg2_total_len),
         &ip2, &ip6_2, nullptr, nullptr, nullptr,
         &tcp2, nullptr, nullptr, nullptr, nullptr, nullptr
     );
+
+    // Fallback по смещениям
+    if (!parse2_ok || (ip2 == nullptr && ip6_2 == nullptr) || tcp2 == nullptr) {
+        if (parsed.ip_ver == IpVersion::IPv4 || parsed.ip_hdr != nullptr) {
+            ip2 = reinterpret_cast<PWINDIVERT_IPHDR>(frag2.buffer.data());
+        } else if (parsed.ip_ver == IpVersion::IPv6 || parsed.ip6_hdr != nullptr) {
+            ip6_2 = reinterpret_cast<PWINDIVERT_IPV6HDR>(frag2.buffer.data());
+        }
+        if (parsed.tcp_hdr != nullptr) {
+            size_t tcp_offset = reinterpret_cast<const uint8_t*>(parsed.tcp_hdr) - raw_packet;
+            if (tcp_offset + sizeof(WINDIVERT_TCPHDR) <= seg2_total_len) {
+                tcp2 = reinterpret_cast<PWINDIVERT_TCPHDR>(frag2.buffer.data() + tcp_offset);
+            }
+        }
+    }
 
     if (ip2 != nullptr) {
         ip2->Length = htons(static_cast<uint16_t>(seg2_total_len));

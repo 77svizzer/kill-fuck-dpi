@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <mutex>
 
 namespace kfdpi {
 
@@ -27,11 +28,13 @@ public:
     }
 
     bool Load(const std::string& path);
-    const RuntimeConfig& Get() const { return config_; }
+    RuntimeConfig Get() const;
+    void SetPreset(const std::string& strategy, const std::string& fooling, bool persist_to_disk = true);
     std::string BuildFilter() const;
 
 private:
     ConfigManager() = default;
+    mutable std::mutex mutex_;
     RuntimeConfig config_;
 };
 

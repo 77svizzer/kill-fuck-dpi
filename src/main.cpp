@@ -28,6 +28,8 @@
 static std::atomic<bool> g_running(false);
 static std::atomic<HANDLE> g_divert_handle{INVALID_HANDLE_VALUE};
 static std::thread g_worker_thread;
+static std::mutex s_worker_mutex;
+static thread_local bool t_is_worker_thread = false;
 
 // Глобальная статистика пакетов
 std::atomic<uint64_t> g_stat_tls(0);
@@ -49,10 +51,10 @@ void stop_divert() {
         WinDivertShutdown(handle, WINDIVERT_SHUTDOWN_BOTH);
         WinDivertClose(handle);
     }
-    static std::mutex s_join_mutex;
-    if (g_worker_thread.joinable() && std::this_thread::get_id() != g_worker_thread.get_id()) {
-        std::unique_lock<std::mutex> lock(s_join_mutex, std::try_to_lock);
-        if (lock.owns_lock() && g_worker_thread.joinable() && std::this_thread::get_id() != g_worker_thread.get_id()) {
+    // Только внешний поток (не сам воркер) выполняет блокирующий join
+    if (!t_is_worker_thread && std::this_thread::get_id() != g_worker_thread.get_id()) {
+        std::lock_guard<std::mutex> lock(s_worker_mutex);
+        if (g_worker_thread.joinable() && std::this_thread::get_id() != g_worker_thread.get_id()) {
             g_worker_thread.join();
         }
     }
@@ -221,7 +223,12 @@ static void packet_loop(bool is_service) {
 
 void start_divert_worker() {
     stop_divert();
+    std::lock_guard<std::mutex> lock(s_worker_mutex);
+    if (g_worker_thread.joinable() && std::this_thread::get_id() != g_worker_thread.get_id()) {
+        g_worker_thread.join();
+    }
     g_worker_thread = std::thread([]() {
+        t_is_worker_thread = true;
         packet_loop(true);
     });
 }

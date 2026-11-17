@@ -20,6 +20,8 @@ static inline std::string to_lower_str(std::string s) {
 }
 
 bool ConfigManager::Load(const std::string& path) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    config_.config_file = path;
     std::ifstream file(path);
     if (!file.is_open()) return false;
 
@@ -67,7 +69,52 @@ bool ConfigManager::Load(const std::string& path) {
     return true;
 }
 
+RuntimeConfig ConfigManager::Get() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return config_;
+}
+
+void ConfigManager::SetPreset(const std::string& strategy, const std::string& fooling, bool persist_to_disk) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    config_.strategy = strategy;
+    config_.fooling = fooling;
+
+    if (persist_to_disk && !config_.config_file.empty()) {
+        std::ifstream in(config_.config_file);
+        if (in.is_open()) {
+            std::vector<std::string> lines;
+            std::string line;
+            while (std::getline(in, line)) {
+                std::string trimmed = trim_str(line);
+                if (!trimmed.empty() && trimmed[0] != '#' && trimmed[0] != ';' && trimmed[0] != '[') {
+                    size_t eq = trimmed.find('=');
+                    if (eq != std::string::npos) {
+                        std::string key = to_lower_str(trim_str(trimmed.substr(0, eq)));
+                        if (key == "strategy") {
+                            lines.push_back("strategy = " + strategy);
+                            continue;
+                        } else if (key == "fooling") {
+                            lines.push_back("fooling = " + fooling);
+                            continue;
+                        }
+                    }
+                }
+                lines.push_back(line);
+            }
+            in.close();
+
+            std::ofstream out(config_.config_file, std::ios::trunc);
+            if (out.is_open()) {
+                for (const auto& l : lines) {
+                    out << l << "\n";
+                }
+            }
+        }
+    }
+}
+
 std::string ConfigManager::BuildFilter() const {
+    std::lock_guard<std::mutex> lock(mutex_);
     std::ostringstream ss;
     ss << "outbound and !loopback and (";
 
@@ -89,8 +136,9 @@ std::string ConfigManager::BuildFilter() const {
         ss << " or (udp and udp.DstPort >= 50000 and udp.DstPort <= 65535 and udp.PayloadLength > 0)";
     }
 
-    // 4. Строгая аппаратная изоляция игровых портов (CS2, FACEIT, Xplay: UDP 27000-27100)
-    ss << ") and !(udp.DstPort >= 27000 and udp.DstPort <= 27100) and !(udp.SrcPort >= 27000 and udp.SrcPort <= 27100)";
+    // 4. Закрываем общее условие фильтрации.
+    // Игровой трафик (CS2, FACEIT, Xplay: UDP 27000-27100) аппаратно изолирован в ядре (не попадает в порты выше).
+    ss << ")";
 
     return ss.str();
 }

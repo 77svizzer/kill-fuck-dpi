@@ -105,7 +105,15 @@ int GuiManager::Run(HINSTANCE hInstance, int nCmdShow) {
     SendMessageW(hwnd_combo_preset_, CB_ADDSTRING, 0, (LPARAM)L"Disorder (Reverse Split 2b) - Стандарт ТСПУ РФ [Рекомендуется]");
     SendMessageW(hwnd_combo_preset_, CB_ADDSTRING, 0, (LPARAM)L"Fake + BadSeq + AutoTTL - Пробитие с фейковым TLS");
     SendMessageW(hwnd_combo_preset_, CB_ADDSTRING, 0, (LPARAM)L"Fake + Disorder - Агрессивная десинхронизация");
-    SendMessageW(hwnd_combo_preset_, CB_SETCURSEL, 0, 0);
+
+    int initial_preset = 0;
+    const auto current_cfg = ConfigManager::Instance().Get();
+    if (current_cfg.strategy == "fake_split2") {
+        initial_preset = 1;
+    } else if (current_cfg.strategy == "fake_disorder") {
+        initial_preset = 2;
+    }
+    SendMessageW(hwnd_combo_preset_, CB_SETCURSEL, initial_preset, 0);
 
     // Главная кнопка запуска/остановки (Owner Draw)
     hwnd_btn_toggle_ = CreateWindowExW(
@@ -278,7 +286,7 @@ LRESULT CALLBACK GuiManager::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
             // 1. Шапка
             SetBkMode(hdc, TRANSPARENT);
             SetTextColor(hdc, RGB(245, 247, 250));
-            SelectObject(hdc, gui.hfont_title_);
+            HFONT old_font = (HFONT)SelectObject(hdc, gui.hfont_title_);
             TextOutW(hdc, 30, 20, L"KILL F#CK DPI", 13);
 
             SetTextColor(hdc, RGB(145, 158, 171));
@@ -291,27 +299,22 @@ LRESULT CALLBACK GuiManager::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
             RoundRect(hdc, 30, 75, 535, 165, 8, 8);
 
             // Индикатор состояния
-            if (gui.bypass_active_) {
-                HBRUSH hbr_dot = CreateSolidBrush(RGB(46, 204, 113));
-                HPEN hpen_dot = CreatePen(PS_SOLID, 1, RGB(46, 204, 113));
-                SelectObject(hdc, hbr_dot);
-                SelectObject(hdc, hpen_dot);
-                Ellipse(hdc, 50, 94, 62, 106);
-                DeleteObject(hbr_dot);
-                DeleteObject(hpen_dot);
+            COLORREF dot_color = gui.bypass_active_ ? RGB(46, 204, 113) : RGB(231, 76, 60);
+            HBRUSH hbr_dot = CreateSolidBrush(dot_color);
+            HPEN hpen_dot = CreatePen(PS_SOLID, 1, dot_color);
+            HGDIOBJ dot_old_br = SelectObject(hdc, hbr_dot);
+            HGDIOBJ dot_old_pen = SelectObject(hdc, hpen_dot);
+            Ellipse(hdc, 50, 94, 62, 106);
+            SelectObject(hdc, dot_old_br);
+            SelectObject(hdc, dot_old_pen);
+            DeleteObject(hbr_dot);
+            DeleteObject(hpen_dot);
 
+            if (gui.bypass_active_) {
                 SetTextColor(hdc, RGB(46, 204, 113));
                 SelectObject(hdc, gui.hfont_bold_);
                 TextOutW(hdc, 70, 91, L"ОБХОД DPI АКТИВЕН", 17);
             } else {
-                HBRUSH hbr_dot = CreateSolidBrush(RGB(231, 76, 60));
-                HPEN hpen_dot = CreatePen(PS_SOLID, 1, RGB(231, 76, 60));
-                SelectObject(hdc, hbr_dot);
-                SelectObject(hdc, hpen_dot);
-                Ellipse(hdc, 50, 94, 62, 106);
-                DeleteObject(hbr_dot);
-                DeleteObject(hpen_dot);
-
                 SetTextColor(hdc, RGB(231, 76, 60));
                 SelectObject(hdc, gui.hfont_bold_);
                 TextOutW(hdc, 70, 91, L"ОБХОД DPI ОСТАНОВЛЕН", 20);
@@ -352,6 +355,7 @@ LRESULT CALLBACK GuiManager::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
             TextOutW(hdc, 305, 250, L"Discord Voice", 13);
             TextOutW(hdc, 435, 250, L"Фейковых пакетов", 16);
 
+            SelectObject(hdc, old_font);
             SelectObject(hdc, old_br);
             SelectObject(hdc, old_pen);
             EndPaint(hWnd, &ps);
@@ -383,7 +387,7 @@ LRESULT CALLBACK GuiManager::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
             if (wmId == ID_COMBO_PRESET && code == CBN_SELCHANGE) {
                 int sel = (int)SendMessageW(gui.hwnd_combo_preset_, CB_GETCURSEL, 0, 0);
                 std::string strat = "disorder";
-                std::string fooling = "none";
+                std::string fooling = "badseq,autottl";
                 if (sel == 1) {
                     strat = "fake_split2";
                     fooling = "badseq,autottl";
@@ -391,6 +395,8 @@ LRESULT CALLBACK GuiManager::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
                     strat = "fake_disorder";
                     fooling = "badseq,autottl";
                 }
+
+                kfdpi::ConfigManager::Instance().SetPreset(strat, fooling);
 
                 // Перезапуск с новым пресетом
                 if (gui.bypass_active_) {
