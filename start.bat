@@ -1,5 +1,5 @@
 @echo off
-setlocal
+setlocal EnableExtensions
 cd /d "%~dp0"
 chcp 65001 >nul
 title KILL F#CK DPI - Панель управления
@@ -7,8 +7,20 @@ title KILL F#CK DPI - Панель управления
 :: Проверка прав Администратора
 net session >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [i] Запрос прав Администратора...
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/c', '""%~f0""' -Verb RunAs"
+    echo.
+    echo ===================================================================
+    echo   [!] Требуются права Администратора для управления WinDivert.
+    echo   [*] Запрос подтверждения прав [UAC]...
+    echo ===================================================================
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Start-Process -FilePath '%~f0' -WorkingDirectory '%~dp0' -Verb RunAs } catch { exit 1 }"
+    if %errorlevel% neq 0 (
+        echo.
+        echo [ОШИБКА] Права Администратора не были предоставлены.
+        echo Пожалуйста, запустите start.bat правой кнопкой мыши:
+        echo   "Запуск от имени администратора"
+        echo.
+        pause
+    )
     exit /b
 )
 
@@ -20,7 +32,7 @@ cls
 echo ===================================================================
 echo             KILL F#CK DPI - Автономный C++ обход ТСПУ
 echo ===================================================================
-echo   YouTube 4K | Discord | CS2 / FACEIT / Xplay | Без winws и zapret
+echo   YouTube 4K  *  Discord  *  CS2 / FACEIT / Xplay  *  Без winws и zapret
 echo -------------------------------------------------------------------
 echo   [!] Автозапуск при старте ПК полностью отключен.
 echo   [!] При закрытии драйвер WinDivert мгновенно выгружается из ядра.
@@ -34,8 +46,10 @@ echo   [5] Проверить доступность (YouTube, Discord, CS2/FACE
 echo.
 echo   [0] Выход
 echo ===================================================================
+set "choice="
 set /p choice="Выберите действие [0-5]: "
 
+if not defined choice goto MENU
 if "%choice%"=="1" goto RUN_GUI
 if "%choice%"=="2" goto RUN_CONSOLE
 if "%choice%"=="3" goto FORCE_CLEAN
@@ -43,7 +57,7 @@ if "%choice%"=="4" goto EDIT_CONFIG
 if "%choice%"=="5" goto CHECK_STATUS
 if "%choice%"=="0" goto EXIT_APP
 
-echo [!] Неверный выбор.
+echo [!] Неверный выбор. Пожалуйста, введите цифру от 0 до 5.
 timeout /t 2 >nul
 goto MENU
 
@@ -79,7 +93,7 @@ goto :eof
 call :CHECK_BINARIES
 cls
 echo [*] Запуск KILL F#CK DPI в графическом режиме...
-start "" "dpi_bypass.exe" --gui
+start "" "%~dp0dpi_bypass.exe" --gui
 echo [OK] Приложение запущено. Значок доступен в системном трее Windows.
 timeout /t 2 >nul
 exit /b
@@ -91,7 +105,7 @@ echo ===================================================================
 echo   Запуск в консольном окне. Для остановки нажмите Ctrl + C.
 echo ===================================================================
 echo.
-dpi_bypass.exe --console
+"%~dp0dpi_bypass.exe" --console
 echo.
 echo [*] Выгрузка WinDivert из ядра Windows...
 call :CLEAN_SERVICES_SILENT
